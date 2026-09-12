@@ -1,1 +1,149 @@
-<p>Platzhalter</p>
+<!doctype html>
+<html lang="de">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Prompt-Bibliothek</title>
+<link rel="stylesheet" href="style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 16'><text y='14' font-size='14'>📝</text></svg>">
+</head>
+<body>
+<div id="boot" class="boot">Wird geladen …</div>
+
+<div id="app" hidden>
+  <header class="topbar">
+    <h1 id="appTitle">Prompt-Bibliothek</h1>
+    <nav class="tabs">
+      <button class="tab" data-view="library" aria-current="true">Bibliothek</button>
+      <button class="tab" data-view="keys" hidden>API-Keys</button>
+      <button class="tab" data-view="admin" hidden>Verwaltung</button>
+    </nav>
+    <div class="who">
+      <span id="whoName"></span>
+      <span id="whoRole" class="badge"></span>
+      <button id="logout" class="link">Abmelden</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- Bibliothek -->
+    <section id="view-library" class="view">
+      <div class="toolbar">
+        <input id="search" type="search" placeholder="Suchen in Titel, Tags und Text …"
+               autocomplete="off" spellcheck="false">
+        <select id="filterVisibility" aria-label="Sichtbarkeit filtern">
+          <option value="">Alle</option>
+          <option value="shared">Geteilt</option>
+          <option value="private">Privat</option>
+        </select>
+        <button id="newPrompt" class="primary" hidden>Neuer Eintrag</button>
+      </div>
+      <div id="tagbar" class="tagbar"></div>
+      <div id="promptList" class="list"></div>
+      <p id="emptyLibrary" class="empty" hidden></p>
+    </section>
+
+    <!-- API-Keys -->
+    <section id="view-keys" class="view" hidden>
+      <div class="toolbar">
+        <h2>API-Keys</h2>
+        <label id="allKeysWrap" hidden class="checkbox">
+          <input type="checkbox" id="allKeys"> Alle Keys dieser Instanz
+        </label>
+        <button id="newKey" class="primary">Neuer Key</button>
+      </div>
+      <p class="hint">
+        Ein Key kann nie mehr als die Person, die ihn ausgestellt hat, und er sieht
+        genau deren Bibliothek. Keys können weder Keys noch Nutzer verwalten.
+      </p>
+      <div id="keyList" class="list"></div>
+    </section>
+
+    <!-- Verwaltung -->
+    <section id="view-admin" class="view" hidden>
+      <h2>Nutzer</h2>
+      <p class="hint">
+        Rollen stammen aus dem Anmeldedienst und stehen hier nur als
+        zuletzt gesehener Wert. Zugang entziehen geschieht im IdP, nicht hier.
+      </p>
+      <div id="userList" class="list"></div>
+      <h2>Protokoll</h2>
+      <div id="auditList" class="list"></div>
+    </section>
+  </main>
+</div>
+
+<!-- Eintrag anlegen/bearbeiten -->
+<dialog id="promptDialog">
+  <form method="dialog" id="promptForm">
+    <h2 id="promptDialogTitle">Neuer Eintrag</h2>
+    <label>Titel<input id="pTitle" required maxlength="300"></label>
+    <label>Tags <small>(mit Komma getrennt)</small><input id="pTags" autocomplete="off"></label>
+    <label>Prompt<textarea id="pBody" rows="14" required></textarea></label>
+    <label class="checkbox" id="pPrivateWrap">
+      <input type="checkbox" id="pPrivate"> Nur für mich
+      <small id="pPrivateNote"></small>
+    </label>
+    <p class="formError" id="promptError" hidden></p>
+    <menu>
+      <button value="cancel" class="ghost">Abbrechen</button>
+      <button value="save" id="promptSave" class="primary">Speichern</button>
+    </menu>
+  </form>
+</dialog>
+
+<!-- Key anlegen -->
+<dialog id="keyDialog">
+  <form method="dialog" id="keyForm">
+    <h2>Neuer API-Key</h2>
+    <label>Name / Zweck<input id="kName" required maxlength="120"
+           placeholder="z. B. Claude Code – lesend"></label>
+    <label>Rolle<select id="kRole">
+      <option value="viewer">Nur lesen</option>
+      <option value="editor">Lesen und schreiben</option>
+    </select></label>
+    <label>Gültig für <small>(Tage)</small><input id="kDays" type="number" min="1" value="365"></label>
+    <p class="formError" id="keyError" hidden></p>
+    <menu>
+      <button value="cancel" class="ghost">Abbrechen</button>
+      <button value="save" class="primary">Key erzeugen</button>
+    </menu>
+  </form>
+</dialog>
+
+<!-- Klartext, genau einmal -->
+<dialog id="keyRevealDialog">
+  <h2>Key erzeugt</h2>
+  <p class="warn">Dieser Key wird <strong>nur jetzt</strong> angezeigt. Danach ist er
+     nicht mehr abrufbar — nur noch widerrufbar.</p>
+  <pre id="keyPlain" class="secret"></pre>
+  <menu>
+    <button id="copyKey" class="ghost">Kopieren</button>
+    <button id="closeReveal" class="primary">Ich habe ihn gesichert</button>
+  </menu>
+</dialog>
+
+<!-- Nutzer löschen -->
+<dialog id="deleteUserDialog">
+  <form method="dialog" id="deleteUserForm">
+    <h2>Nutzer entfernen</h2>
+    <p id="duSummary"></p>
+    <div id="duPrivate"></div>
+    <label id="duReasonWrap" hidden>Begründung <small>(wird protokolliert)</small>
+      <input id="duReason"></label>
+    <p class="warn">
+      Der Zugang wird dadurch <strong>nicht</strong> entzogen. Entferne die Person
+      zuerst im Anmeldedienst, sonst legt der nächste Login ein neues, leeres Konto an.
+    </p>
+    <p class="formError" id="duError" hidden></p>
+    <menu>
+      <button value="cancel" class="ghost">Abbrechen</button>
+      <button value="delete" class="danger">Endgültig entfernen</button>
+    </menu>
+  </form>
+</dialog>
+
+<div id="toast" class="toast" hidden></div>
+<script src="app.js"></script>
+</body>
+</html>

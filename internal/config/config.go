@@ -137,12 +137,16 @@ func Load() (*Config, error) {
 		ClaimsSource:       ClaimsSource(env("OIDC_CLAIMS_SOURCE", string(ClaimsBoth))),
 		PostLogoutRedirect: env("OIDC_POST_LOGOUT_REDIRECT", ""),
 	}
-	for name, v := range map[string]string{
-		"OIDC_ISSUER": c.OIDC.Issuer, "OIDC_CLIENT_ID": c.OIDC.ClientID,
-		"OIDC_CLIENT_SECRET": c.OIDC.ClientSecret, "OIDC_REDIRECT_URI": c.OIDC.RedirectURI,
+	// Als Liste, nicht als Map: die Fehlermeldung soll bei jedem Start in
+	// derselben Reihenfolge erscheinen.
+	for _, required := range []struct{ name, value string }{
+		{"OIDC_ISSUER", c.OIDC.Issuer},
+		{"OIDC_CLIENT_ID", c.OIDC.ClientID},
+		{"OIDC_CLIENT_SECRET", c.OIDC.ClientSecret},
+		{"OIDC_REDIRECT_URI", c.OIDC.RedirectURI},
 	} {
-		if v == "" {
-			fail("%s muss gesetzt sein", name)
+		if required.value == "" {
+			fail("%s muss gesetzt sein", required.name)
 		}
 	}
 	switch c.OIDC.ClaimsSource {

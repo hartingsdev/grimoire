@@ -1,0 +1,33 @@
+# Eine Instanz je Service, gleiches Image, getrennte Konfiguration und Daten.
+#
+# Die Ports sind bewusst nur an 127.0.0.1 gebunden: TLS und öffentliche
+# Erreichbarkeit macht der Reverse Proxy auf dem Host (Caddy oder nginx).
+# Für traefik zusätzlich docker-compose.traefik.yml verwenden:
+#   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d
+
+services:
+  prompts-privat:
+    build: .
+    image: prompt-library:latest
+    container_name: prompts-privat
+    restart: unless-stopped
+    env_file: .env.privat
+    volumes:
+      - privat-data:/data
+    ports:
+      - "127.0.0.1:8081:8080"
+
+  prompts-arbeit:
+    build: .
+    image: prompt-library:latest
+    container_name: prompts-arbeit
+    restart: unless-stopped
+    env_file: .env.arbeit
+    volumes:
+      - arbeit-data:/data
+    ports:
+      - "127.0.0.1:8082:8080"
+
+volumes:
+  privat-data:
+  arbeit-data:

@@ -1,0 +1,34 @@
+# Überlagerung für traefik: keine veröffentlichten Ports mehr, stattdessen
+# Labels und das externe traefik-Netz.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d
+#
+# Voraussetzung: ein Netz namens "traefik", an dem auch traefik hängt, und ein
+# Zertifikats-Resolver namens "le" (Name ggf. anpassen).
+
+services:
+  prompts-privat:
+    ports: !reset []
+    networks: [traefik]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: traefik
+      traefik.http.routers.prompts-privat.rule: "Host(`prompts.example.org`)"
+      traefik.http.routers.prompts-privat.entrypoints: websecure
+      traefik.http.routers.prompts-privat.tls.certresolver: le
+      traefik.http.services.prompts-privat.loadbalancer.server.port: "8080"
+
+  prompts-arbeit:
+    ports: !reset []
+    networks: [traefik]
+    labels:
+      traefik.enable: "true"
+      traefik.docker.network: traefik
+      traefik.http.routers.prompts-arbeit.rule: "Host(`prompts-arbeit.example.org`)"
+      traefik.http.routers.prompts-arbeit.entrypoints: websecure
+      traefik.http.routers.prompts-arbeit.tls.certresolver: le
+      traefik.http.services.prompts-arbeit.loadbalancer.server.port: "8080"
+
+networks:
+  traefik:
+    external: true

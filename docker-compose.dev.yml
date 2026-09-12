@@ -1,0 +1,24 @@
+# Nur für lokale Tests: ein nachgebildeter OIDC-Provider, mit dem sich alle
+# Rollen und der Fall "keine passende Gruppe" durchspielen lassen, ohne
+# Authentik anzufassen.
+#
+#   docker compose -f docker-compose.dev.yml up -d
+#   ./scripts/dev.sh
+#
+# Die App läuft dabei absichtlich NICHT im Container: so benutzen Browser und
+# Anwendung dieselbe Adresse für den Provider (http://localhost:8090/default)
+# und es gibt keinen Issuer-Konflikt zwischen innen und außen.
+
+services:
+  mock-oidc:
+    image: ghcr.io/navikt/mock-oauth2-server:2.1.10
+    container_name: prompt-library-mock-oidc
+    ports:
+      - "127.0.0.1:8090:8090"
+    environment:
+      SERVER_PORT: "8090"
+      # interactiveLogin blendet beim Anmelden ein Formular ein, in das sich
+      # Subject und beliebige Claims (inklusive groups) eintragen lassen.
+      JSON_CONFIG: >-
+        {"interactiveLogin":true,
+         "tokenProvider":{"keyProvider":{"initialKeys":null,"algorithm":"RS256"}}}
