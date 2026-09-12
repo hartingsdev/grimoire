@@ -293,3 +293,98 @@ func TestHealthAndReadiness(t *testing.T) {
 		t.Errorf("/readyz ohne Provider: Status %d, erwartet 503", w.Code)
 	}
 }
+
+// Break-Glass: ein Administrator kommt an einen fremden privaten Eintrag, aber
+// nur einzeln, nur mit Begründung — und der Besitzer sieht es hinterher.
+func TestBreakGlassIsAuditedAndVisibleToOwner(t *testing.T) {
+	srv, st, _ := testServer(t)
+	now := time.Now()
+	anna, err := st.UpsertUserOnLogin(t.Context(), "anna", "anna@example.org", "Anna", auth.RoleEditor, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	admin, err := st.UpsertUserOnLogin(t.Context(), "chef", "chef@example.org", "Chef", auth.RoleAdmin, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	priv, err := st.CreatePrompt(t.Context(), store.Prompt{
+		Title: "Geheim", Body: "nur für anna", Visibility: store.VisibilityPrivate,
+	}, anna.ID, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Ohne Begründung: keine Freischaltung.
+	w := call(t, srv, "POST", "/api/v1/admin/prompts/"+priv.ID+"/reveal", admin, `{"reason":""}`)
+	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "reason_required") {
+		t.Errorf("Freischaltung ohne Begründung: Status %d, %s", w.Code, w.Body.String())
+	}
+
+	w = call(t, srv, "POST", "/api/v1/admin/prompts/"+priv.ID+"/reveal", admin,
+		`{"reason":"Verdacht auf Weitergabe von Kundendaten"}`)
+	if w.Code != http.StatusOK {
+		t.Fatalf("Freischaltung mit Begründung: Status %d, %s", w.Code, w.Body.String())
+	}
+	if !strings.Contains(w.Body.String(), "nur für anna") {
+		t.Error("Inhalt wurde nicht geliefert")
+	}
+
+	// Der Besitzer sieht den Vorgang in seinem eigenen Protokoll.
+	w = call(t, srv, "GET", "/api/v1/me/audit", anna, "")
+	if w.Code != http.StatusOK {
+		t.Fatalf("eigenes Protokoll: Status %d", w.Code)
+	}
+	if !strings.Contains(w.Body.String(), store.ActionPrivateRevealed) ||
+		!strings.Contains(w.Body.String(), "Kundendaten") {
+		t.Errorf("Besitzer sieht die Freischaltung nicht: %s", w.Body.String())
+	}
+}
+
+// call führt einen Aufruf als angemeldeter Mensch aus (Cookie-Sitzung statt Key).
+func call(t *testing.T, srv *Server, method, path string, user store.User, body string) *httptest.ResponseRecorder {
+	t.Helper()
+	now := time.Now()
+	sess, err := srv.store.CreateSession(t.Context(), user.ID, user.CachedRole,
+		"", "", time.Time{}, now, now.Add(time.Hour), now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var reader io.Reader
+	if body != "" {
+		reader = strings.NewReader(body)
+	}
+	r := httptest.NewRequest(method, path, reader)
+	r.AddCookie(&http.Cookie{Name: sessionCookie, Value: sess.ID})
+	r.Header.Set("X-CSRF-Token", sess.CSRFToken)
+	if body != "" {
+		r.Header.Set("Content-Type", "application/json")
+	}
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, r)
+	return w
+}
+
+// Ohne CSRF-Token wird ein schreibender Zugriff aus dem Browser abgewiesen,
+// auch bei gültiger Sitzung.
+func TestSessionWriteRequiresCSRFToken(t *testing.T) {
+	srv, st, _ := testServer(t)
+	now := time.Now()
+	anna, err := st.UpsertUserOnLogin(t.Context(), "anna", "a@example.org", "Anna", auth.RoleEditor, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sess, err := st.CreateSession(t.Context(), anna.ID, auth.RoleEditor, "", "",
+		time.Time{}, now, now.Add(time.Hour), now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := httptest.NewRequest("POST", "/api/v1/prompts",
+		strings.NewReader(`{"title":"x","body":"y"}`))
+	r.AddCookie(&http.Cookie{Name: sessionCookie, Value: sess.ID})
+	r.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	srv.ServeHTTP(w, r)
+	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "csrf") {
+		t.Errorf("Schreibzugriff ohne CSRF-Token: Status %d, %s", w.Code, w.Body.String())
+	}
+}

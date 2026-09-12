@@ -70,8 +70,11 @@ Basis: `{BASE_URL}/api/v1`
 | `POST`   | `/prompts/{id}/restore`    | `editor` | Wiederherstellen |
 | `GET`    | `/tags`                    | `viewer` | Tags mit Häufigkeit |
 
+| `GET` | `/me/audit` | beide | Was mit den eigenen Inhalten geschehen ist |
+
 Nur im Browser erreichbar (für Keys immer `403`):
-`/api-keys`, `/admin/users`, `/admin/users/{id}/footprint`, `/admin/audit`.
+`/api-keys`, `/admin/users`, `/admin/users/{id}/footprint`, `/admin/audit`,
+`/admin/prompts/{id}/reveal`.
 
 Ohne Anmeldung: `GET /healthz`, `GET /readyz`.
 

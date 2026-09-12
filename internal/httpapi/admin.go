@@ -160,6 +160,76 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// handleRevealPrivate schaltet einen einzelnen fremden privaten Eintrag für
+// einen Administrator frei.
+//
+// Das ist die Antwort auf den Verdachtsfall, ohne "privat" zu einer leeren
+// Zusage zu machen: es ist ein ausdrücklicher Einzelakt, er verlangt eine
+// Begründung, er landet unveränderlich im Protokoll — und der Besitzer sieht
+// ihn in seiner eigenen Oberfläche. Heimlich geht es in keiner Einstellung.
+func (s *Server) handleRevealPrivate(w http.ResponseWriter, r *http.Request) {
+	p := auth.FromContext(r.Context())
+	if s.cfg.AdminPrivateAccess == config.AdminPrivateNone {
+		writeError(w, http.StatusForbidden, "private_access_disabled",
+			"Diese Instanz steht auf ADMIN_PRIVATE_ACCESS=none. Private Einträge "+
+				"anderer sind hier für niemanden einsehbar.")
+		return
+	}
+	var in struct {
+		Reason string `json:"reason"`
+	}
+	if !decodeJSON(w, r, &in) {
+		return
+	}
+	if strings.TrimSpace(in.Reason) == "" {
+		writeError(w, http.StatusBadRequest, "reason_required",
+			"Eine Begründung ist erforderlich. Sie wird protokolliert und ist für "+
+				"den Besitzer des Eintrags sichtbar.")
+		return
+	}
+
+	id := r.PathValue("id")
+	prompt, err := s.store.GetPrompt(r.Context(), store.Scope{
+		ViewerID: p.UserID, SeeAllPrivate: true,
+	}, id)
+	if err != nil {
+		s.writeStoreError(w, r, err)
+		return
+	}
+	// Eigene und geteilte Einträge sind ohnehin sichtbar; dafür braucht es
+	// keinen Protokolleintrag.
+	if prompt.Visibility != store.VisibilityPrivate || prompt.OwnerID == p.UserID {
+		writeJSON(w, http.StatusOK, toPromptJSON(prompt))
+		return
+	}
+	detail, _ := json.Marshal(map[string]string{"owner": prompt.OwnerID, "title": prompt.Title})
+	s.audit(r, store.AuditEntry{
+		Action: store.ActionPrivateRevealed, TargetType: "prompt", TargetID: id,
+		Reason: in.Reason, DetailJSON: string(detail),
+	})
+	s.log.Warn("privater Eintrag freigeschaltet",
+		"admin", p.UserID, "eintrag", id, "besitzer", prompt.OwnerID, "begruendung", in.Reason)
+	writeJSON(w, http.StatusOK, toPromptJSON(prompt))
+}
+
+// handleMyAudit zeigt, was mit den eigenen Inhalten geschehen ist.
+func (s *Server) handleMyAudit(w http.ResponseWriter, r *http.Request) {
+	p := auth.FromContext(r.Context())
+	entries, err := s.store.ListAudit(r.Context(), p.UserID, 50, 0)
+	if err != nil {
+		s.writeStoreError(w, r, err)
+		return
+	}
+	out := make([]map[string]any, 0, len(entries))
+	for _, e := range entries {
+		out = append(out, map[string]any{
+			"at": e.At, "actor": userRef{ID: e.ActorID, Name: e.ActorName},
+			"action": e.Action, "targetId": e.TargetID, "reason": e.Reason,
+		})
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"entries": out})
+}
+
 func (s *Server) handleListAudit(w http.ResponseWriter, r *http.Request) {
 	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))

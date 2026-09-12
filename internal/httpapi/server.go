@@ -98,6 +98,11 @@ func (s *Server) registerRoutes() {
 	s.capability("GET", "/api/v1/admin/users/{id}/footprint", auth.CapAdminUsers, s.handleUserFootprint)
 	s.capability("DELETE", "/api/v1/admin/users/{id}", auth.CapAdminUsers, s.handleDeleteUser)
 	s.capability("GET", "/api/v1/admin/audit", auth.CapAuditRead, s.handleListAudit)
+	s.capability("POST", "/api/v1/admin/prompts/{id}/reveal", auth.CapAdminRead, s.handleRevealPrivate)
+
+	// Jede und jeder sieht das eigene Protokoll — insbesondere, wenn ein Admin
+	// einen privaten Eintrag freigeschaltet hat.
+	s.authenticated("GET", "/api/v1/me/audit", s.handleMyAudit)
 
 	// Oberfläche
 	s.public("GET", "/", s.handleStatic)
