@@ -27,7 +27,7 @@ func TestSessionCapabilities(t *testing.T) {
 	}{
 		{RoleNone, nil},
 		{RoleViewer, []Capability{CapPromptsRead}},
-		{RoleEditor, []Capability{CapPromptsRead, CapPromptsWrite}},
+		{RoleEditor, []Capability{CapPromptsRead, CapPromptsWrite, CapKeysManage}},
 		{RoleAdmin, []Capability{
 			CapPromptsRead, CapPromptsWrite, CapKeysManage,
 			CapAdminRead, CapAdminUsers, CapAuditRead,
@@ -78,6 +78,24 @@ func TestKeyRoundTrip(t *testing.T) {
 	}
 	if SecretMatches(secret+"x", hash) {
 		t.Error("verändertes Geheimnis wurde akzeptiert")
+	}
+}
+
+// Das base64url-Alphabet enthält Unterstriche. Ein Parser, der am Unterstrich
+// zerlegt, verwirft dadurch jeden zweiten erzeugten Key.
+func TestKeyWithUnderscoreInSecret(t *testing.T) {
+	for i := 0; i < 200; i++ {
+		plaintext, id, hash, err := NewKey("privat")
+		if err != nil {
+			t.Fatal(err)
+		}
+		gotID, secret, err := ParseKey("privat", plaintext)
+		if err != nil {
+			t.Fatalf("Key %q nicht parsebar: %v", plaintext, err)
+		}
+		if gotID != id || !SecretMatches(secret, hash) {
+			t.Fatalf("Key %q falsch zerlegt", plaintext)
+		}
 	}
 }
 

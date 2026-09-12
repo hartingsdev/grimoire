@@ -108,6 +108,7 @@ type Session struct {
 	RevalidateAfter time.Time
 	AccessToken     string
 	RefreshToken    string
+	TokenExpiry     time.Time
 }
 
 type AuditEntry struct {

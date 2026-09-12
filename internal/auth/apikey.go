@@ -59,7 +59,9 @@ func NewKey(instance string) (plaintext, id string, hash []byte, err error) {
 // Ein Key der falschen Instanz wird hier abgewiesen, bevor die Datenbank
 // überhaupt angefasst wird.
 func ParseKey(instance, raw string) (id, secret string, err error) {
-	parts := strings.Split(strings.TrimSpace(raw), "_")
+	// SplitN mit 4, nicht Split: das base64url-kodierte Geheimnis darf selbst
+	// Unterstriche enthalten und muss ungeteilt bleiben.
+	parts := strings.SplitN(strings.TrimSpace(raw), "_", 4)
 	if len(parts) != 4 {
 		return "", "", ErrMalformedKey
 	}

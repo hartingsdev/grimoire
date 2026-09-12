@@ -56,6 +56,11 @@ func Capabilities(p Principal) CapSet {
 		caps.add(CapPromptsRead)
 	case RoleEditor:
 		caps.add(CapPromptsRead, CapPromptsWrite)
+		if p.Kind == KindSession {
+			// Bearbeiter verwalten ihre eigenen Keys; die Einschränkung auf die
+			// eigenen liegt in den Abfragen, nicht in der Fähigkeit.
+			caps.add(CapKeysManage)
+		}
 	case RoleAdmin:
 		caps.add(CapPromptsRead, CapPromptsWrite)
 		if p.Kind == KindSession {

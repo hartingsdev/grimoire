@@ -2,10 +2,15 @@ module github.com/hartingsdev/solid-bassoon
 
 go 1.25.0
 
-require modernc.org/sqlite v1.58.0
+require (
+	github.com/coreos/go-oidc/v3 v3.16.0
+	golang.org/x/oauth2 v0.32.0
+	modernc.org/sqlite v1.58.0
+)
 
 require (
 	github.com/dustin/go-humanize v1.0.1 // indirect
+	github.com/go-jose/go-jose/v4 v4.1.3 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/mattn/go-isatty v0.0.24 // indirect
 	github.com/ncruces/go-strftime v1.0.0 // indirect

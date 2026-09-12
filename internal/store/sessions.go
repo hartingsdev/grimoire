@@ -13,7 +13,8 @@ import (
 // verschlüsselt abgelegt, damit die Sitzung später beim IdP nachfragen kann,
 // ob die Rolle noch gilt.
 func (s *Store) CreateSession(ctx context.Context, userID string, role auth.Role,
-	accessToken, refreshToken string, now, expiresAt, revalidateAfter time.Time) (Session, error) {
+	accessToken, refreshToken string, tokenExpiry time.Time,
+	now, expiresAt, revalidateAfter time.Time) (Session, error) {
 
 	access, err := s.seal(accessToken)
 	if err != nil {
@@ -26,14 +27,14 @@ func (s *Store) CreateSession(ctx context.Context, userID string, role auth.Role
 	sess := Session{
 		ID: NewToken(), UserID: userID, Role: role, CSRFToken: NewToken(),
 		CreatedAt: now, ExpiresAt: expiresAt, LastSeenAt: now, RevalidateAfter: revalidateAfter,
-		AccessToken: accessToken, RefreshToken: refreshToken,
+		AccessToken: accessToken, RefreshToken: refreshToken, TokenExpiry: tokenExpiry,
 	}
 	_, err = s.db.ExecContext(ctx, `INSERT INTO sessions
 		(id, user_id, role, csrf_token, created_at, expires_at, last_seen_at,
-		 revalidate_after, access_token_enc, refresh_token_enc)
-		VALUES (?,?,?,?,?,?,?,?,?,?)`,
+		 revalidate_after, access_token_enc, refresh_token_enc, token_expiry)
+		VALUES (?,?,?,?,?,?,?,?,?,?,?)`,
 		sess.ID, userID, string(role), sess.CSRFToken, now.Unix(), expiresAt.Unix(),
-		now.Unix(), revalidateAfter.Unix(), access, refresh)
+		now.Unix(), revalidateAfter.Unix(), access, refresh, nullTimeZero(tokenExpiry))
 	return sess, err
 }
 
@@ -42,7 +43,7 @@ func (s *Store) CreateSession(ctx context.Context, userID string, role auth.Role
 func (s *Store) GetSession(ctx context.Context, id string, now time.Time) (Session, User, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT s.id, s.user_id, s.role, s.csrf_token,
 		s.created_at, s.expires_at, s.last_seen_at, s.revalidate_after,
-		s.access_token_enc, s.refresh_token_enc, `+userColumnsU+`
+		s.access_token_enc, s.refresh_token_enc, s.token_expiry, `+userColumnsU+`
 		FROM sessions s JOIN users u ON u.id = s.user_id
 		WHERE s.id = ? AND s.expires_at > ? AND u.deleted_at IS NULL`, id, now.Unix())
 
@@ -50,6 +51,7 @@ func (s *Store) GetSession(ctx context.Context, id string, now time.Time) (Sessi
 	var role string
 	var created, expires, lastSeen, reval int64
 	var access, refresh []byte
+	var tokenExpiry int64
 	var u User
 	var sub, email, name sql.NullString
 	var uRoleAt, uCreated, uLogin int64
@@ -57,7 +59,7 @@ func (s *Store) GetSession(ctx context.Context, id string, now time.Time) (Sessi
 	var uRole string
 
 	err := row.Scan(&sess.ID, &sess.UserID, &role, &sess.CSRFToken,
-		&created, &expires, &lastSeen, &reval, &access, &refresh,
+		&created, &expires, &lastSeen, &reval, &access, &refresh, &tokenExpiry,
 		&u.ID, &sub, &email, &name, &uRole, &uRoleAt, &uCreated, &uLogin, &uDeleted)
 	if errors.Is(err, sql.ErrNoRows) {
 		return Session{}, User{}, ErrNotFound
@@ -74,6 +76,9 @@ func (s *Store) GetSession(ctx context.Context, id string, now time.Time) (Sessi
 	// verworfen statt stillschweigend weiterzulaufen.
 	sess.AccessToken, _ = s.open(access)
 	sess.RefreshToken, _ = s.open(refresh)
+	if tokenExpiry > 0 {
+		sess.TokenExpiry = time.Unix(tokenExpiry, 0)
+	}
 
 	u.Sub, u.Email, u.DisplayName = sub.String, email.String, name.String
 	u.CachedRole = auth.ParseRole(uRole)
@@ -93,7 +98,7 @@ func (s *Store) TouchSession(ctx context.Context, id string, now time.Time) erro
 // UpdateSessionAfterRevalidation schreibt die beim IdP frisch bestätigte Rolle
 // und die neuen Tokens fort.
 func (s *Store) UpdateSessionAfterRevalidation(ctx context.Context, id string, role auth.Role,
-	accessToken, refreshToken string, revalidateAfter time.Time) error {
+	accessToken, refreshToken string, tokenExpiry, revalidateAfter time.Time) error {
 
 	access, err := s.seal(accessToken)
 	if err != nil {
@@ -104,8 +109,8 @@ func (s *Store) UpdateSessionAfterRevalidation(ctx context.Context, id string, r
 		return err
 	}
 	_, err = s.db.ExecContext(ctx, `UPDATE sessions SET role = ?, revalidate_after = ?,
-		access_token_enc = ?, refresh_token_enc = ? WHERE id = ?`,
-		string(role), revalidateAfter.Unix(), access, refresh, id)
+		access_token_enc = ?, refresh_token_enc = ?, token_expiry = ? WHERE id = ?`,
+		string(role), revalidateAfter.Unix(), access, refresh, nullTimeZero(tokenExpiry), id)
 	return err
 }
 

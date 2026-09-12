@@ -198,7 +198,7 @@ func TestSessionTokensAreEncryptedAtRest(t *testing.T) {
 	anna := mustUser(t, s, ctx, "anna", auth.RoleViewer)
 
 	sess, err := s.CreateSession(ctx, anna.ID, auth.RoleViewer, "geheimes-access-token",
-		"geheimes-refresh-token", now, now.Add(time.Hour), now.Add(time.Minute))
+		"geheimes-refresh-token", now.Add(30*time.Minute), now, now.Add(time.Hour), now.Add(time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}

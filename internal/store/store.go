@@ -157,6 +157,14 @@ func nullTime(t time.Time) any {
 	return t.Unix()
 }
 
+// nullTimeZero bildet die Nullzeit auf 0 ab (Spalte ist NOT NULL DEFAULT 0).
+func nullTimeZero(t time.Time) int64 {
+	if t.IsZero() {
+		return 0
+	}
+	return t.Unix()
+}
+
 func unix(t sql.NullInt64) time.Time {
 	if !t.Valid || t.Int64 == 0 {
 		return time.Time{}

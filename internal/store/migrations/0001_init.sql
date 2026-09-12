@@ -79,7 +79,8 @@ CREATE TABLE sessions (
     last_seen_at     INTEGER NOT NULL,
     revalidate_after INTEGER NOT NULL,
     access_token_enc BLOB,                    -- AES-GCM, Schlüssel aus DATA_ENCRYPTION_KEY
-    refresh_token_enc BLOB
+    refresh_token_enc BLOB,
+    token_expiry     INTEGER NOT NULL DEFAULT 0
 );
 CREATE INDEX sessions_user    ON sessions(user_id);
 CREATE INDEX sessions_expires ON sessions(expires_at);
