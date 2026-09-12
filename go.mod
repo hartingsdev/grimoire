@@ -1,4 +1,4 @@
-module github.com/hartingsdev/solid-bassoon
+module github.com/hartingsdev/grimoire
 
 go 1.25.0
 

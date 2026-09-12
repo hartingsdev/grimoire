@@ -6,8 +6,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hartingsdev/solid-bassoon/internal/auth"
-	"github.com/hartingsdev/solid-bassoon/internal/store"
+	"github.com/hartingsdev/grimoire/internal/auth"
+	"github.com/hartingsdev/grimoire/internal/store"
 )
 
 type apiKeyJSON struct {

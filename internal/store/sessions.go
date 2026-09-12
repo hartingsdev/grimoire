@@ -6,7 +6,7 @@ import (
 	"errors"
 	"time"
 
-	"github.com/hartingsdev/solid-bassoon/internal/auth"
+	"github.com/hartingsdev/grimoire/internal/auth"
 )
 
 // CreateSession opens a browser session. Provider tokens are stored encrypted

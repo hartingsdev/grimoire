@@ -13,9 +13,9 @@ import (
 
 	"golang.org/x/oauth2"
 
-	"github.com/hartingsdev/solid-bassoon/internal/auth"
-	"github.com/hartingsdev/solid-bassoon/internal/ratelimit"
-	"github.com/hartingsdev/solid-bassoon/internal/store"
+	"github.com/hartingsdev/grimoire/internal/auth"
+	"github.com/hartingsdev/grimoire/internal/ratelimit"
+	"github.com/hartingsdev/grimoire/internal/store"
 )
 
 const (

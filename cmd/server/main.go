@@ -16,11 +16,11 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/hartingsdev/solid-bassoon/internal/auth"
-	"github.com/hartingsdev/solid-bassoon/internal/config"
-	"github.com/hartingsdev/solid-bassoon/internal/httpapi"
-	"github.com/hartingsdev/solid-bassoon/internal/store"
-	"github.com/hartingsdev/solid-bassoon/web"
+	"github.com/hartingsdev/grimoire/internal/auth"
+	"github.com/hartingsdev/grimoire/internal/config"
+	"github.com/hartingsdev/grimoire/internal/httpapi"
+	"github.com/hartingsdev/grimoire/internal/store"
+	"github.com/hartingsdev/grimoire/web"
 )
 
 func main() {

@@ -12,7 +12,7 @@ import (
 	"github.com/coreos/go-oidc/v3/oidc"
 	"golang.org/x/oauth2"
 
-	"github.com/hartingsdev/solid-bassoon/internal/config"
+	"github.com/hartingsdev/grimoire/internal/config"
 )
 
 // Identity is what the app knows about a person after a login or a

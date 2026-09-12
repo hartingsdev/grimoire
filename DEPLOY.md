@@ -17,7 +17,7 @@ how to test both locally first.
 ### 1.2 Configuration
 
 ```bash
-git clone <this-repo> grimoire && cd grimoire
+git clone https://github.com/hartingsdev/grimoire && cd grimoire
 cp .env.personal.example .env.personal
 cp .env.work.example     .env.work
 

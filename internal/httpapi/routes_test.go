@@ -11,10 +11,10 @@ import (
 	"testing/fstest"
 	"time"
 
-	"github.com/hartingsdev/solid-bassoon/internal/auth"
-	"github.com/hartingsdev/solid-bassoon/internal/config"
-	"github.com/hartingsdev/solid-bassoon/internal/ratelimit"
-	"github.com/hartingsdev/solid-bassoon/internal/store"
+	"github.com/hartingsdev/grimoire/internal/auth"
+	"github.com/hartingsdev/grimoire/internal/config"
+	"github.com/hartingsdev/grimoire/internal/ratelimit"
+	"github.com/hartingsdev/grimoire/internal/store"
 )
 
 func testServer(t *testing.T) (*Server, *store.Store, *config.Config) {

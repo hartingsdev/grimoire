@@ -10,10 +10,10 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hartingsdev/solid-bassoon/internal/auth"
-	"github.com/hartingsdev/solid-bassoon/internal/config"
-	"github.com/hartingsdev/solid-bassoon/internal/ratelimit"
-	"github.com/hartingsdev/solid-bassoon/internal/store"
+	"github.com/hartingsdev/grimoire/internal/auth"
+	"github.com/hartingsdev/grimoire/internal/config"
+	"github.com/hartingsdev/grimoire/internal/ratelimit"
+	"github.com/hartingsdev/grimoire/internal/store"
 )
 
 // Access says how a route is protected. There is no fourth value and no route

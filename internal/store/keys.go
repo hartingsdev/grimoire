@@ -7,7 +7,7 @@ import (
 	"fmt"
 	"time"
 
-	"github.com/hartingsdev/solid-bassoon/internal/auth"
+	"github.com/hartingsdev/grimoire/internal/auth"
 )
 
 // CreateAPIKey mints a key and stores only its hash. The plaintext is returned

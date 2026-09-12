@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/hartingsdev/solid-bassoon/internal/auth"
-	"github.com/hartingsdev/solid-bassoon/internal/config"
-	"github.com/hartingsdev/solid-bassoon/internal/store"
+	"github.com/hartingsdev/grimoire/internal/auth"
+	"github.com/hartingsdev/grimoire/internal/config"
+	"github.com/hartingsdev/grimoire/internal/store"
 )
 
 // handleMe answers "who am I and what may I do", so the UI only offers what

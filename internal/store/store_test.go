@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hartingsdev/solid-bassoon/internal/auth"
+	"github.com/hartingsdev/grimoire/internal/auth"
 )
 
 func testStore(t *testing.T) (*Store, context.Context) {

@@ -5,7 +5,7 @@ import (
 	"encoding/hex"
 	"time"
 
-	"github.com/hartingsdev/solid-bassoon/internal/auth"
+	"github.com/hartingsdev/grimoire/internal/auth"
 )
 
 // TombstoneName stands in wherever a deleted user appears as an author. The
