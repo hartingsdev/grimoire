@@ -1,8 +1,11 @@
-# Promptory
+# Grimoire
 
 A self-hosted prompt library with OIDC sign-in, role-based permissions and a
 REST API for scripts. One Go binary, one SQLite file, one container — runs
 anywhere Docker does, tied to no cloud provider.
+
+*A grimoire is a book of spells you keep, refine and reach for again. Prompts
+turn out to work much the same way.*
 
 ```
   Browser ──── OIDC session ────┐
@@ -12,7 +15,7 @@ anywhere Docker does, tied to no cloud provider.
 
 Prompts you keep, find and paste dozens of times a day deserve better than a
 scratch file — but not a SaaS subscription and not an account on someone else's
-machine. Promptory is the small thing in between: a searchable library your
+machine. Grimoire is the small thing in between: a searchable library your
 colleagues can share, your scripts can read, and you can move to another server
 with `scp` and a `docker compose up`.
 
@@ -80,7 +83,7 @@ into its database row. Two further layers make sure nothing routes around it:
 You need Go 1.25+ and Docker.
 
 ```bash
-git clone https://github.com/hartingsdev/promptory && cd promptory
+git clone https://github.com/hartingsdev/grimoire && cd grimoire
 
 docker compose -f docker-compose.dev.yml up -d   # mock OIDC provider on :8090
 ./scripts/dev.sh                                 # app on http://localhost:8080
@@ -113,7 +116,7 @@ a reverse proxy at it, and `docker compose up -d --build`.
 
 ```bash
 export PL=https://prompts.example.org
-export PL_KEY=plk_privat_9f3k2md7qa4x_…
+export PL_KEY=plk_personal_9f3k2md7qa4x_…
 
 curl -s -H "Authorization: Bearer $PL_KEY" \
      --get --data-urlencode "q=code review" "$PL/api/v1/prompts" | jq '.prompts[].title'
@@ -126,7 +129,7 @@ Full reference, error codes and rate-limit handling in [API.md](API.md).
 **Roles come from the identity provider and nowhere else.** There is no user
 list and no permission editor in the app. A second place where roles live is a
 second place to forget. The claim is fully configurable — a custom claim, a
-groups array, or a nested path like `resource_access.promptory.roles` — so the
+groups array, or a nested path like `resource_access.grimoire.roles` — so the
 app is not married to one provider. No matching claim means no access, and no
 account is created either.
 
@@ -172,7 +175,7 @@ library. Routing is the standard library's `ServeMux`; migrations are embedded
 ## Configuration
 
 Each instance is configured entirely through environment variables, one `.env`
-file per instance. See `.env.privat.example` for the annotated full set; the
+file per instance. See `.env.personal.example` for the annotated full set; the
 ones worth knowing up front:
 
 | Variable | Default | Notes |

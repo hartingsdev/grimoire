@@ -1,47 +1,47 @@
-# Betrieb (Promptory)
+# Deploying Grimoire
 
-Was du auf deinem Server einrichten musst, was in Authentik einzutragen ist und
-wie du beides vorher lokal durchtestest.
+What to set up on your server, what to configure at your identity provider, and
+how to test both locally first.
 
 ---
 
-## 1. Auf dem Server
+## 1. On the server
 
-### 1.1 Voraussetzungen
+### 1.1 Prerequisites
 
-* Docker mit Compose-Plugin (`docker compose version`).
-* Ein Reverse Proxy, der TLS beendet. Die Anwendung kümmert sich bewusst nicht
-  selbst um Zertifikate.
-* Zwei DNS-Namen, je einer pro Instanz.
+* Docker with the Compose plugin (`docker compose version`).
+* A reverse proxy that terminates TLS. The app deliberately does not handle
+  certificates itself.
+* One DNS name per instance.
 
-### 1.2 Konfiguration anlegen
+### 1.2 Configuration
 
 ```bash
-git clone <dieses-repo> promptory && cd promptory
-cp .env.privat.example .env.privat
-cp .env.arbeit.example .env.arbeit
+git clone <this-repo> grimoire && cd grimoire
+cp .env.personal.example .env.personal
+cp .env.work.example     .env.work
 
-# Für jede Instanz ein eigener Schlüssel:
-openssl rand -base64 32   # → DATA_ENCRYPTION_KEY in .env.privat
-openssl rand -base64 32   # → DATA_ENCRYPTION_KEY in .env.arbeit
+# One key per instance:
+openssl rand -base64 32   # → DATA_ENCRYPTION_KEY in .env.personal
+openssl rand -base64 32   # → DATA_ENCRYPTION_KEY in .env.work
 ```
 
-Dann in beiden Dateien setzen: `BASE_URL`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
+Then set in both files: `BASE_URL`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
 `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URI`, `TRUSTED_PROXY_CIDRS`.
 
-> Die echten `.env.privat` und `.env.arbeit` sind in `.gitignore` eingetragen.
-> Versioniert sind nur die Vorlagen. Wenn du das Repo auf dem Server auscheckst,
-> liegen die Geheimnisse damit nur dort.
+> The real `.env.personal` and `.env.work` are in `.gitignore`; only the
+> templates are versioned. Checking the repo out on the server keeps the secrets
+> there and nowhere else.
 
-Zwei Werte, die du nach dem Start **nicht mehr folgenlos ändern kannst**:
+Two values you **cannot change afterwards without consequences**:
 
-* `APP_INSTANCE` steht in jedem ausgestellten Key. Eine Änderung entwertet alle.
-* `DATA_ENCRYPTION_KEY` entschlüsselt die abgelegten Provider-Tokens. Nach einem
-  Wechsel müssen sich alle neu anmelden (die Daten selbst bleiben unberührt).
+* `APP_INSTANCE` appears in every key issued. Changing it invalidates them all.
+* `DATA_ENCRYPTION_KEY` decrypts the stored provider tokens. After a rotation
+  everyone has to sign in again (the data itself is untouched).
 
-### 1.3 Starten
+### 1.3 Starting
 
-Mit Caddy oder nginx auf dem Host — die Anwendung hört dann nur auf localhost:
+With Caddy or nginx on the host — the app then listens on localhost only:
 
 ```bash
 docker compose up -d --build
@@ -49,32 +49,31 @@ docker compose ps
 curl -s localhost:8081/healthz && curl -s localhost:8082/healthz
 ```
 
-Mit traefik im selben Docker-Netz:
+With traefik on the same Docker network:
 
 ```bash
-# In docker-compose.traefik.yml die beiden Host()-Regeln und ggf. den
-# certresolver-Namen anpassen, dann:
+# Adjust the two Host() rules and the certresolver name in
+# docker-compose.traefik.yml, then:
 docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d --build
 ```
 
-`/readyz` meldet erst dann `200`, wenn der Anmeldedienst erreichbar war. Das ist
-der richtige Endpunkt für eine Überwachung — `/healthz` sagt nur, dass der
-Prozess lebt.
+`/readyz` returns `200` only once the identity provider has been reached. That
+is the endpoint to monitor; `/healthz` only says the process is alive.
 
-### 1.4 Reverse Proxy
+### 1.4 Reverse proxy
 
-Wichtig ist in allen Varianten, dass `X-Forwarded-Proto` durchgereicht wird und
-das Netz des Proxys in `TRUSTED_PROXY_CIDRS` steht. Fehlt beides, baut die
-Anwendung ihre Adressen als `http://` — der klassische Fehler hinter
-TLS-Terminierung, der sich als „Redirect-URI stimmt nicht" äußert.
+What matters in every variant is that `X-Forwarded-Proto` is passed through and
+that the proxy's network is listed in `TRUSTED_PROXY_CIDRS`. Without both, the
+app builds its URLs as `http://` — the classic failure behind TLS termination,
+which surfaces as “redirect URI mismatch”.
 
-**Caddy** (`/etc/caddy/Caddyfile`) — setzt die Forwarded-Header von selbst:
+**Caddy** (`/etc/caddy/Caddyfile`) — sets the forwarded headers by itself:
 
 ```caddy
 prompts.example.org {
     reverse_proxy 127.0.0.1:8081
 }
-prompts-arbeit.example.org {
+prompts-work.example.org {
     reverse_proxy 127.0.0.1:8082
 }
 ```
@@ -85,7 +84,7 @@ prompts-arbeit.example.org {
 server {
     listen 443 ssl http2;
     server_name prompts.example.org;
-    # ssl_certificate … (z.B. über certbot)
+    # ssl_certificate … (e.g. via certbot)
 
     location / {
         proxy_pass         http://127.0.0.1:8081;
@@ -97,284 +96,279 @@ server {
 }
 ```
 
-**traefik:** die Labels in `docker-compose.traefik.yml` reichen; traefik setzt
-die Forwarded-Header selbst. `TRUSTED_PROXY_CIDRS` muss dann das Docker-Netz
-umfassen, in dem traefik läuft (üblich: `172.16.0.0/12`).
+**traefik:** the labels in `docker-compose.traefik.yml` are enough; traefik sets
+the forwarded headers itself. `TRUSTED_PROXY_CIDRS` must then cover the Docker
+network traefik runs on (usually `172.16.0.0/12`).
 
-### 1.5 Datenablage und Sicherung
+### 1.5 Data and backups
 
-Jede Instanz hat ein eigenes benanntes Volume mit genau einer SQLite-Datei
-(plus `-wal` und `-shm` im laufenden Betrieb).
+Each instance has its own named volume holding exactly one SQLite file (plus
+`-wal` and `-shm` while running).
 
-**Nicht einfach die Datei kopieren.** Im WAL-Modus ist eine so entstandene Kopie
-womöglich inkonsistent. SQLite bringt dafür einen eigenen Befehl mit:
+**Do not simply copy the file.** In WAL mode such a copy may be inconsistent.
+SQLite has a command for this:
 
 ```bash
 #!/usr/bin/env bash
-# /usr/local/bin/promptory-backup
+# /usr/local/bin/grimoire-backup
 set -euo pipefail
-ZIEL=/var/backups/promptory
+DEST=/var/backups/grimoire
 STAMP=$(date +%F)
-mkdir -p "$ZIEL"
+mkdir -p "$DEST"
 
-for instanz in privat arbeit; do
+for instance in personal work; do
   docker run --rm \
-    -v "promptory_${instanz}-data:/data:ro" \
-    -v "$ZIEL:/backup" \
+    -v "grimoire_${instance}-data:/data:ro" \
+    -v "$DEST:/backup" \
     --entrypoint sh keinos/sqlite3 -c \
-    "sqlite3 /data/prompts.db \".backup '/backup/${instanz}-${STAMP}.db'\""
-  gzip -f "$ZIEL/${instanz}-${STAMP}.db"
+    "sqlite3 /data/grimoire.db \".backup '/backup/${instance}-${STAMP}.db'\""
+  gzip -f "$DEST/${instance}-${STAMP}.db"
 done
 
-find "$ZIEL" -name '*.db.gz' -mtime +30 -delete
+find "$DEST" -name '*.db.gz' -mtime +30 -delete
 ```
 
 ```cron
-17 3 * * * /usr/local/bin/promptory-backup
+17 3 * * * /usr/local/bin/grimoire-backup
 ```
 
-Der Volume-Name ist `<projektname>_<volume>`; `docker volume ls` zeigt ihn.
-Prüfe eine Sicherung gelegentlich wirklich zurück — eine ungetestete Sicherung
-ist eine Vermutung:
+The volume name is `<project>_<volume>`; `docker volume ls` shows it. Restore a
+backup occasionally and check it — an untested backup is a guess:
 
 ```bash
-gunzip -c /var/backups/promptory/privat-2026-09-12.db.gz > /tmp/pruef.db
-sqlite3 /tmp/pruef.db "PRAGMA integrity_check; SELECT COUNT(*) FROM prompts;"
+gunzip -c /var/backups/grimoire/personal-2026-09-12.db.gz > /tmp/check.db
+sqlite3 /tmp/check.db "PRAGMA integrity_check; SELECT COUNT(*) FROM prompts;"
 ```
 
-### 1.6 Aktualisieren
+### 1.6 Updating
 
 ```bash
 git pull
 docker compose up -d --build
 ```
 
-Migrationen laufen beim Start selbsttätig. Vor einem Update, das das Schema
-anfasst, eine Sicherung ziehen.
+Migrations run at startup. Take a backup before an update that touches the
+schema.
 
 ---
 
-## 2. In Authentik
+## 2. At the identity provider
 
-Pro Instanz **eine eigene Anwendung mit eigenem Provider** — sonst teilen sich
-privat und arbeit Client-ID und Rollen.
+One application with its own provider **per instance** — otherwise personal and
+work share a client ID and a set of roles. The walkthrough below uses Authentik;
+any OIDC provider works, the app only needs a role claim.
 
-### 2.1 Provider anlegen
+### 2.1 Create the provider
 
 *Applications → Providers → Create → OAuth2/OpenID Provider*
 
-| Feld | Wert |
-|------|------|
-| Name | `promptory-privat` |
-| Authorization flow | dein üblicher expliziter Einwilligungsfluss |
+| Field | Value |
+|-------|-------|
+| Name | `grimoire-personal` |
+| Authorization flow | your usual explicit-consent flow |
 | Client type | **Confidential** |
-| Redirect URIs | `https://prompts.example.org/auth/callback` (exakt, ohne Schrägstrich am Ende) |
-| Signing Key | dein Zertifikat |
+| Redirect URIs | `https://prompts.example.org/auth/callback` (exact, no trailing slash) |
+| Signing key | your certificate |
 
-Client-ID und Client-Secret danach nach `.env.privat` übernehmen.
+Copy the client ID and secret into `.env.personal`, and repeat for the work
+instance with `https://prompts-work.example.org/auth/callback`.
 
-Für die Arbeits-Instanz dasselbe mit
-`https://prompts-arbeit.example.org/auth/callback`.
+### 2.2 Delivering the role
 
-### 2.2 Rollen übermitteln
+Access is decided **solely** by a claim. There is no user list in the app to
+maintain — and nobody whose claim yields no role gets in.
 
-Die Anwendung entscheidet über den Zugang **ausschließlich** anhand eines Claims.
-Es gibt keine Nutzerliste in der App, die man pflegen müsste — und niemand kommt
-hinein, dessen Claim keine Rolle ergibt.
-
-**Variante A — eigener Claim (empfohlen, weil pro Anwendung vergeben).**
+**Option A — a custom claim (recommended, because it is granted per
+application).**
 
 *Customization → Property mappings → Create → Scope mapping*
 
-| Feld | Wert |
-|------|------|
-| Name | `promptory-role-privat` |
-| Scope name | `promptory` |
-| Expression | siehe unten |
+| Field | Value |
+|-------|-------|
+| Name | `grimoire-role-personal` |
+| Scope name | `grimoire` |
+| Expression | see below |
 
 ```python
-# Gruppenzugehörigkeit auf genau eine Rolle abbilden.
-# Der Rückgabewert landet als Claim im ID-Token und in userinfo.
-if request.user.ak_groups.filter(name="prompts-privat-admins").exists():
+# Map group membership onto exactly one role. The return value becomes a claim
+# in the ID token and in userinfo.
+if request.user.ak_groups.filter(name="grimoire-personal-admins").exists():
     role = "admin"
-elif request.user.ak_groups.filter(name="prompts-privat-editors").exists():
+elif request.user.ak_groups.filter(name="grimoire-personal-editors").exists():
     role = "editor"
-elif request.user.ak_groups.filter(name="prompts-privat-viewers").exists():
+elif request.user.ak_groups.filter(name="grimoire-personal-viewers").exists():
     role = "viewer"
 else:
-    role = None          # kein Claim → kein Zugriff
-return {"promptory_role": role}
+    role = None          # no claim → no access
+return {"grimoire_role": role}
 ```
 
-Das Mapping dem Provider unter *Scopes* zuweisen. Dann in der `.env`:
+Assign the mapping to the provider under *Scopes*, then in the `.env`:
 
 ```
-OIDC_SCOPES=openid,profile,email,promptory
-OIDC_ROLE_CLAIM=promptory_role
+OIDC_SCOPES=openid,profile,email,grimoire
+OIDC_ROLE_CLAIM=grimoire_role
 OIDC_ROLE_MAP=
 ```
 
-Der Vorteil gegenüber Gruppen: derselbe Gruppenbaum kann in der privaten
-Instanz etwas anderes bedeuten als in der Arbeits-Instanz, ohne dass du global
-eindeutige Gruppennamen erfinden musst.
+The advantage over groups: the same group tree can mean one thing on the
+personal instance and another on the work instance, without inventing globally
+unique group names.
 
-**Variante B — Gruppen (funktioniert mit praktisch jedem Provider).**
+**Option B — groups (works with practically any provider).**
 
 ```
 OIDC_SCOPES=openid,profile,email
 OIDC_ROLE_CLAIM=groups
-OIDC_ROLE_MAP=prompts-privat-admins:admin,prompts-privat-editors:editor,prompts-privat-viewers:viewer
+OIDC_ROLE_MAP=grimoire-personal-admins:admin,grimoire-personal-editors:editor,grimoire-personal-viewers:viewer
 ```
 
-Bei mehreren Treffern gewinnt die höchste Rolle. Für andere Provider ist
-`OIDC_ROLE_CLAIM` ein Pfad, verschachtelte Claims eingeschlossen — für Keycloak
-etwa `resource_access.prompt-lib.roles`.
+With several matches the highest role wins. For other providers
+`OIDC_ROLE_CLAIM` is a path, nested claims included — for Keycloak, for example,
+`resource_access.grimoire.roles`.
 
-### 2.3 Benötigte Claims
+### 2.3 Claims the app needs
 
-| Claim | Nötig? | Wofür |
-|-------|--------|-------|
-| `sub` | **ja** | Identität. Ohne ihn wird die Anmeldung abgelehnt |
-| der Rollen-Claim | **ja** | Ohne passenden Wert: kein Zugriff |
-| `email` | nein | Anzeige, Nutzerliste |
-| `name` oder `preferred_username` | nein | Anzeige |
+| Claim | Required? | Used for |
+|-------|-----------|----------|
+| `sub` | **yes** | identity. Without it the sign-in is refused |
+| the role claim | **yes** | without a matching value: no access |
+| `email` | no | display, user list |
+| `name` or `preferred_username` | no | display |
 
-`OIDC_CLAIMS_SOURCE=both` (Vorgabe) führt die Claims aus ID-Token und
-`userinfo` zusammen. Das ist der Grund, warum ein Rollen-Claim auch dann
-gefunden wird, wenn der Provider ihn nur an einer der beiden Stellen liefert.
+`OIDC_CLAIMS_SOURCE=both` (the default) merges claims from the ID token and
+`userinfo`. That is why a role claim is found even when the provider exposes it
+at only one of the two.
 
-### 2.4 Erster Administrator
+### 2.4 The first administrator
 
-Es gibt keinen Notzugang über eine Umgebungsvariable — das wäre eine zweite
-Stelle neben dem IdP, genau das, was hier vermieden werden soll. Der erste
-Administrator entsteht dadurch, dass du dich selbst in Authentik in die
-Admin-Gruppe legst und dich anmeldest. Geht beim Mapping etwas schief, kommt
-niemand hinein; repariert wird das in Authentik, nicht in der App.
+There is no emergency access through an environment variable — that would be a
+second place beside the IdP, exactly what this design avoids. The first
+administrator comes about by putting yourself into the admin group at the
+provider and signing in. If the mapping is wrong, nobody gets in, and you fix it
+at the provider, not in the app.
 
-### 2.5 Zugang entziehen
+### 2.5 Withdrawing access
 
-Im IdP die Gruppe bzw. den Claim entfernen. Die Anwendung merkt es bei der
-nächsten Revalidierung (Vorgabe: spätestens nach 15 Minuten):
+Remove the group or claim at the provider. The app notices at the next
+revalidation (default: within 15 minutes):
 
-* laufende Sitzungen werden beendet,
-* alle Keys dieser Person antworten `401` — inaktiv, aber nicht widerrufen,
-  damit sie bei einer Rückkehr wieder funktionieren.
+* live sessions end,
+* every key of that person answers `401` — inactive, not revoked, so they work
+  again if the person returns.
 
-Die **Daten** der Person bleiben dabei in der App. Sollen die auch weg, zusätzlich
-in der Oberfläche unter *Verwaltung → Nutzer → Entfernen*. Dabei gilt: geteilte
-Einträge bleiben erhalten (Teamwissen) und werden „Gelöschter Nutzer"
-zugeschrieben, private werden gelöscht, Keys und Sitzungen verschwinden, das
-Protokoll bleibt.
+Their **data** stays in the app. To remove that as well, use *Administration →
+Users → Remove* in the UI: shared prompts stay (team knowledge) and are
+attributed to “Deleted user”, private ones are deleted, keys and sessions go,
+and the audit log remains.
 
 ---
 
-## 3. Vorher lokal durchtesten
+## 3. Testing it all locally first
 
-Das Ziel: Anmeldung, alle drei Rollen, der Fall „kein Zugriff" und die API mit
-einem echten Key — alles bevor irgendetwas öffentlich erreichbar ist.
+The goal: sign-in, all three roles, the “no access” case and the API with a real
+key — all before anything is publicly reachable.
 
-### 3.1 Nachgebildeten Anmeldedienst starten
+### 3.1 Start the mock provider
 
 ```bash
 docker compose -f docker-compose.dev.yml up -d
 curl -s http://localhost:8090/default/.well-known/openid-configuration | head -5
 ```
 
-### 3.2 Anwendung lokal starten
+### 3.2 Start the app
 
 ```bash
 ./scripts/dev.sh
 ```
 
-Die Anwendung läuft dabei absichtlich **nicht** im Container: so benutzen Browser
-und Anwendung dieselbe Provider-Adresse und es entsteht kein Issuer-Konflikt.
-`STATIC_DIR=./web` sorgt dafür, dass Änderungen an Oberfläche, CSS und JS ohne
-Neuübersetzen wirken.
+The app deliberately runs **outside** Docker here, so browser and app use the
+same provider address and no issuer mismatch arises. `STATIC_DIR=./web` makes
+changes to the UI, CSS and JS take effect without recompiling.
 
-### 3.3 Anmeldung und Rollen prüfen
+### 3.3 Check sign-in and roles
 
-`http://localhost:8080` öffnen. Der nachgebildete Dienst zeigt ein Formular; im
-Feld für die Claims eintragen, welche Rolle geprüft werden soll:
+Open `http://localhost:8080`. The mock provider shows a form; in the claims
+field enter the role you want to check:
 
-| Eingabe | Erwartung |
-|---------|-----------|
-| `{"groups":["pl-admin"]}` | Anmeldung klappt, alle drei Reiter sichtbar |
-| `{"groups":["pl-editor"]}` | Bibliothek und API-Keys, kein Reiter „Verwaltung" |
-| `{"groups":["pl-viewer"]}` | nur Bibliothek, kein „Neuer Eintrag" |
-| `{"groups":["sonstwas"]}` | **403 „Kein Zugriff"**, kein Konto wird angelegt |
+| Input | Expectation |
+|-------|-------------|
+| `{"groups":["pl-admin"]}` | signs in, all three tabs visible |
+| `{"groups":["pl-editor"]}` | library and API keys, no “Administration” tab |
+| `{"groups":["pl-viewer"]}` | library only, no “New prompt” button |
+| `{"groups":["something"]}` | **403 “No access”**, and no account is created |
 
-Weitere Punkte, die sich hier prüfen lassen:
+Worth checking here too:
 
-* **Rechte greifen serverseitig, nicht nur in der Anzeige.** Als Betrachter
-  anmelden und in der Entwicklerkonsole schreiben wollen — erwartet: `403`.
+* **Permissions are enforced server-side, not just hidden.** Sign in as a viewer
+  and try to write from the browser console — expect `403`.
   ```js
   await fetch('/api/v1/prompts', {method:'POST',
     headers:{'Content-Type':'application/json',
              'X-CSRF-Token':(await (await fetch('/api/v1/me')).json()).csrfToken},
     body:'{"title":"x","body":"y"}'}).then(r => r.status)
   ```
-* **Private Einträge sind privat.** Als Bearbeiter A einen privaten Eintrag
-  anlegen, abmelden, als Bearbeiter B (anderes `sub`) anmelden — er darf weder
-  in der Liste noch in der Suche noch über die direkte ID auftauchen.
-* **Entzug wirkt.** `AUTH_REVALIDATE_INTERVAL` steht in `dev.sh` auf `1m`.
-  Angemeldet bleiben, sich beim nachgebildeten Dienst mit geänderten Claims neu
-  anmelden — nach spätestens einer Minute richtet sich die Sitzung danach.
-* **Versionshistorie.** Einen Eintrag mehrfach ändern, löschen, über
-  `/api/v1/prompts/{id}/revisions` den Verlauf ansehen und wiederherstellen.
+* **Private prompts really are private.** Create one as editor A, sign out, sign
+  in as editor B (a different `sub`) — it must appear neither in the listing nor
+  in search nor via its direct ID.
+* **Withdrawal takes effect.** `AUTH_REVALIDATE_INTERVAL` is set to `1m` in
+  `dev.sh`. Stay signed in, re-authenticate at the mock provider with changed
+  claims, and within a minute the session follows.
+* **Revision history.** Edit a prompt a few times, delete it, inspect
+  `/api/v1/prompts/{id}/revisions` and restore it.
 
-### 3.4 API mit einem Test-Key prüfen
+### 3.4 Check the API with test keys
 
-In der Oberfläche zwei Keys anlegen: einen mit „Nur lesen", einen mit
-„Lesen und schreiben". Dann:
+Create two keys in the UI, one “read only” and one “read and write”, then:
 
 ```bash
-./scripts/test-api.sh http://localhost:8080 "plk_privat_…lesend" "plk_privat_…schreibend"
+./scripts/test-api.sh http://localhost:8080 "plk_personal_…read" "plk_personal_…write"
 ```
 
-Das Skript prüft nicht nur, was gehen soll, sondern vor allem, was **nicht**
-gehen darf: Schreiben mit dem Lese-Key, jeder Zugriff auf die Verwaltung,
-ein Key der falschen Instanz, ein verfälschter Key, das Rate-Limit.
+The script checks not only what should work but above all what must **not**:
+writing with the read key, any access to management endpoints, a key from
+another instance, a tampered key, the rate limit.
 
-Fürs Rate-Limit lohnt ein kleiner Wert, sonst dauert es:
+For the rate limit a small value saves time:
 
 ```bash
 RATE_LIMIT_PER_MIN=5 ./scripts/dev.sh
 ```
 
-### 3.5 Aufräumen und scharf schalten
+### 3.5 Clean up and go live
 
 ```bash
 docker compose -f docker-compose.dev.yml down
-rm -rf ./data          # die Entwicklungsdatenbank
+rm -rf ./data          # the development database
 ```
 
-Danach die Schritte aus Abschnitt 2 in Authentik ausführen, die `.env`-Dateien
-mit den echten Werten füllen und mit Abschnitt 1.3 starten. Die erste Anmeldung
-auf dem Server ist gleichzeitig die Probe: Kommst du als Administrator hinein,
-stimmen Redirect-URI, Client-Secret und Rollen-Mapping.
+Then do section 2 at your provider, fill the `.env` files with real values and
+start as in section 1.3. The first sign-in on the server is the proof: if you
+get in as an administrator, redirect URI, client secret and role mapping are all
+correct.
 
 ---
 
-## 4. Kurzcheckliste
+## 4. Checklist
 
 **Server**
 
-- [ ] Docker und Compose vorhanden
-- [ ] Repo ausgecheckt, `.env.privat` und `.env.arbeit` aus den Vorlagen erzeugt
-- [ ] Je ein `DATA_ENCRYPTION_KEY` erzeugt
-- [ ] `TRUSTED_PROXY_CIDRS` passend zum Proxy gesetzt
-- [ ] Zwei DNS-Namen zeigen auf den Server
-- [ ] Reverse Proxy mit TLS und `X-Forwarded-Proto`
-- [ ] `docker compose up -d --build`, `/readyz` antwortet `200`
-- [ ] Sicherungsskript eingerichtet und **einmal zurückgeprüft**
-- [ ] Überwachung auf `/readyz`
+- [ ] Docker and Compose present
+- [ ] Repo checked out, `.env.personal` and `.env.work` created from the templates
+- [ ] One `DATA_ENCRYPTION_KEY` generated per instance
+- [ ] `TRUSTED_PROXY_CIDRS` matches the proxy
+- [ ] Two DNS names point at the server
+- [ ] Reverse proxy with TLS and `X-Forwarded-Proto`
+- [ ] `docker compose up -d --build`, `/readyz` returns `200`
+- [ ] Backup script installed and **restored once** as a check
+- [ ] Monitoring on `/readyz`
 
-**Authentik**
+**Identity provider**
 
-- [ ] Zwei Anwendungen mit je einem vertraulichen OAuth2/OIDC-Provider
-- [ ] Redirect-URIs exakt eingetragen
-- [ ] Client-ID und Secret in die jeweilige `.env` übernommen
-- [ ] Rollen-Mapping angelegt (eigener Claim oder Gruppen)
-- [ ] Scope dem Provider zugewiesen, falls eigener Claim
-- [ ] Du selbst in der Admin-Gruppe der jeweiligen Instanz
-- [ ] Anmeldung mit einem Konto **ohne** Rolle liefert 403
+- [ ] Two applications, each with its own confidential OAuth2/OIDC provider
+- [ ] Redirect URIs entered exactly
+- [ ] Client ID and secret copied into the matching `.env`
+- [ ] Role mapping created (custom claim or groups)
+- [ ] Scope assigned to the provider, if using a custom claim
+- [ ] You are in the admin group of each instance
+- [ ] Signing in with an account that has **no** role returns 403

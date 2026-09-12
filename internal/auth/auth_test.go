@@ -13,7 +13,7 @@ func TestAPIKeyNeverGetsManagementCapabilities(t *testing.T) {
 		p := Principal{Kind: KindAPIKey, Role: role}
 		for _, cap := range ManagementCapabilities {
 			if p.Can(cap) {
-				t.Errorf("API-Key mit Rolle %s hat %s erhalten — das darf nicht passieren", role, cap)
+				t.Errorf("API key with role %s was granted %s — that must never happen", role, cap)
 			}
 		}
 	}
@@ -36,11 +36,11 @@ func TestSessionCapabilities(t *testing.T) {
 		p := Principal{Kind: KindSession, Role: tc.role}
 		got := p.CapabilityList()
 		if len(got) != len(tc.want) {
-			t.Fatalf("Rolle %s: %v, erwartet %v", tc.role, got, tc.want)
+			t.Fatalf("role %s: %v, want %v", tc.role, got, tc.want)
 		}
 		for i := range got {
 			if got[i] != tc.want[i] {
-				t.Errorf("Rolle %s: %v, erwartet %v", tc.role, got, tc.want)
+				t.Errorf("role %s: %v, want %v", tc.role, got, tc.want)
 			}
 		}
 	}
@@ -55,28 +55,28 @@ func TestMinRole(t *testing.T) {
 	}
 	for _, tc := range tests {
 		if got := MinRole(tc.key, tc.owner); got != tc.want {
-			t.Errorf("MinRole(%s, %s) = %s, erwartet %s", tc.key, tc.owner, got, tc.want)
+			t.Errorf("MinRole(%s, %s) = %s, want %s", tc.key, tc.owner, got, tc.want)
 		}
 	}
 }
 
 func TestKeyRoundTrip(t *testing.T) {
-	plaintext, id, hash, err := NewKey("privat")
+	plaintext, id, hash, err := NewKey("personal")
 	if err != nil {
 		t.Fatal(err)
 	}
-	gotID, secret, err := ParseKey("privat", plaintext)
+	gotID, secret, err := ParseKey("personal", plaintext)
 	if err != nil {
-		t.Fatalf("eigener Key nicht parsebar: %v", err)
+		t.Fatalf("our own key could not be parsed: %v", err)
 	}
 	if gotID != id {
-		t.Errorf("Key-ID %q, erwartet %q", gotID, id)
+		t.Errorf("key id %q, want %q", gotID, id)
 	}
 	if !SecretMatches(secret, hash) {
-		t.Error("Geheimnis passt nicht zum gespeicherten Hash")
+		t.Error("secret does not match the stored hash")
 	}
 	if SecretMatches(secret+"x", hash) {
-		t.Error("verändertes Geheimnis wurde akzeptiert")
+		t.Error("a tampered secret was accepted")
 	}
 }
 
@@ -84,40 +84,40 @@ func TestKeyRoundTrip(t *testing.T) {
 // underscore throws away roughly every other key it mints.
 func TestKeyWithUnderscoreInSecret(t *testing.T) {
 	for i := 0; i < 200; i++ {
-		plaintext, id, hash, err := NewKey("privat")
+		plaintext, id, hash, err := NewKey("personal")
 		if err != nil {
 			t.Fatal(err)
 		}
-		gotID, secret, err := ParseKey("privat", plaintext)
+		gotID, secret, err := ParseKey("personal", plaintext)
 		if err != nil {
-			t.Fatalf("Key %q nicht parsebar: %v", plaintext, err)
+			t.Fatalf("key %q could not be parsed: %v", plaintext, err)
 		}
 		if gotID != id || !SecretMatches(secret, hash) {
-			t.Fatalf("Key %q falsch zerlegt", plaintext)
+			t.Fatalf("key %q was split incorrectly", plaintext)
 		}
 	}
 }
 
 // A key from another instance is rejected before any database access.
 func TestKeyRejectsForeignInstance(t *testing.T) {
-	plaintext, _, _, err := NewKey("arbeit")
+	plaintext, _, _, err := NewKey("work")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := ParseKey("privat", plaintext); err == nil {
-		t.Error("Key der Instanz 'arbeit' wurde in 'privat' akzeptiert")
+	if _, _, err := ParseKey("personal", plaintext); err == nil {
+		t.Error("a key for instance 'work' was accepted by 'personal'")
 	}
 }
 
 func TestKeyRejectsMalformed(t *testing.T) {
 	for _, raw := range []string{
-		"", "plk", "plk_privat", "plk_privat_kurz_abc",
-		"xyz_privat_9f3k2md7qa4x_secret",
-		"plk_privat_9f3k2md7qa4x_", // leeres Geheimnis
-		"Bearer plk_privat_9f3k2md7qa4x_secret",
+		"", "plk", "plk_privat", "plk_personal_kurz_abc",
+		"xyz_personal_9f3k2md7qa4x_secret",
+		"plk_personal_9f3k2md7qa4x_", // leeres Geheimnis
+		"Bearer plk_personal_9f3k2md7qa4x_secret",
 	} {
-		if _, _, err := ParseKey("privat", raw); err == nil {
-			t.Errorf("%q wurde als gültiger Key akzeptiert", raw)
+		if _, _, err := ParseKey("personal", raw); err == nil {
+			t.Errorf("%q was accepted as a valid key", raw)
 		}
 	}
 }
@@ -134,17 +134,17 @@ func TestRoleMapper(t *testing.T) {
 		name, claim, mapping, claims string
 		want                         Role
 	}{
-		{"Gruppen-Array, höchste gewinnt", "groups", "pl-viewer:viewer,pl-admin:admin",
+		{"groups array, highest wins", "groups", "pl-viewer:viewer,pl-admin:admin",
 			`{"groups":["pl-viewer","pl-admin","unbeteiligt"]}`, RoleAdmin},
-		{"eigener Claim ohne Mapping", "promptory_role", "",
-			`{"promptory_role":"editor"}`, RoleEditor},
-		{"Keycloak, verschachtelt", "resource_access.prompt-lib.roles", "",
+		{"custom claim without a mapping", "grimoire_role", "",
+			`{"grimoire_role":"editor"}`, RoleEditor},
+		{"Keycloak, nested", "resource_access.prompt-lib.roles", "",
 			`{"resource_access":{"prompt-lib":{"roles":["viewer"]}}}`, RoleViewer},
-		{"kein Treffer", "groups", "pl-editor:editor",
+		{"no match", "groups", "pl-editor:editor",
 			`{"groups":["irgendwas"]}`, RoleNone},
-		{"Claim fehlt", "groups", "pl-editor:editor", `{"sub":"abc"}`, RoleNone},
-		{"Claim ist kein Objekt auf dem Pfad", "a.b.c", "", `{"a":"text"}`, RoleNone},
-		{"unbekannter Rollenname ohne Mapping", "role", "", `{"role":"superuser"}`, RoleNone},
+		{"claim missing", "groups", "pl-editor:editor", `{"sub":"abc"}`, RoleNone},
+		{"claim is not an object along the path", "a.b.c", "", `{"a":"text"}`, RoleNone},
+		{"unknown role name without a mapping", "role", "", `{"role":"superuser"}`, RoleNone},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
@@ -153,7 +153,7 @@ func TestRoleMapper(t *testing.T) {
 				t.Fatal(err)
 			}
 			if got := m.Resolve(claimsOf(tc.claims)); got != tc.want {
-				t.Errorf("Resolve = %q, erwartet %q", got, tc.want)
+				t.Errorf("Resolve = %q, want %q", got, tc.want)
 			}
 		})
 	}
@@ -162,26 +162,26 @@ func TestRoleMapper(t *testing.T) {
 func TestRoleMapperRejectsBadConfig(t *testing.T) {
 	for _, mapping := range []string{"ohne-doppelpunkt", "gruppe:superuser", "   ,  "} {
 		if _, err := NewRoleMapper("groups", mapping); err == nil {
-			t.Errorf("OIDC_ROLE_MAP=%q wurde akzeptiert", mapping)
+			t.Errorf("OIDC_ROLE_MAP=%q was accepted", mapping)
 		}
 	}
 	if _, err := NewRoleMapper("", ""); err == nil {
-		t.Error("leerer OIDC_ROLE_CLAIM wurde akzeptiert")
+		t.Error("an empty OIDC_ROLE_CLAIM was accepted")
 	}
 }
 
 func TestOwnerStale(t *testing.T) {
 	now := time.Now()
 	if !OwnerStale(time.Time{}, time.Hour, now) {
-		t.Error("nie verifizierter Besitzer muss als veraltet gelten")
+		t.Error("an owner never verified must count as stale")
 	}
 	if !OwnerStale(now.Add(-2*time.Hour), time.Hour, now) {
-		t.Error("zu alter Cache muss als veraltet gelten")
+		t.Error("a cache that is too old must count as stale")
 	}
 	if OwnerStale(now.Add(-time.Minute), time.Hour, now) {
-		t.Error("frischer Cache darf nicht als veraltet gelten")
+		t.Error("a fresh cache must not count as stale")
 	}
 	if OwnerStale(time.Time{}, 0, now) {
-		t.Error("abgeschaltete Prüfung (0) darf nie greifen")
+		t.Error("a disabled check (0) must never fire")
 	}
 }

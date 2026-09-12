@@ -47,7 +47,7 @@ type OIDC struct {
 
 type Config struct {
 	AppTitle    string
-	AppInstance string // Teil des API-Key-Präfix, daher unveränderlich nach Ausgabe
+	AppInstance string // part of the API key prefix, so fixed once keys exist
 	BaseURL     string
 	ListenAddr  string
 	DBPath      string
@@ -79,7 +79,7 @@ func Load() (*Config, error) {
 	fail := func(format string, a ...any) { errs = append(errs, fmt.Sprintf(format, a...)) }
 
 	c := &Config{
-		AppTitle:    env("APP_TITLE", "Promptory"),
+		AppTitle:    env("APP_TITLE", "Grimoire"),
 		AppInstance: env("APP_INSTANCE", ""),
 		BaseURL:     strings.TrimRight(env("BASE_URL", ""), "/"),
 		ListenAddr:  env("LISTEN_ADDR", ":8080"),
@@ -89,16 +89,16 @@ func Load() (*Config, error) {
 	}
 
 	if !instanceRe.MatchString(c.AppInstance) {
-		fail("APP_INSTANCE muss gesetzt sein und aus 1-16 Kleinbuchstaben/Ziffern bestehen (z.B. privat, arbeit) — er ist Teil jedes API-Keys")
+		fail("APP_INSTANCE must be set to 1-16 lowercase letters or digits (e.g. personal, work) — it is part of every API key")
 	}
 	if c.BaseURL == "" {
-		fail("BASE_URL muss gesetzt sein (z.B. https://prompts.example.org)")
+		fail("BASE_URL must be set (e.g. https://prompts.example.org)")
 	}
 
 	for _, raw := range splitList(env("TRUSTED_PROXY_CIDRS", "")) {
 		p, err := netip.ParsePrefix(raw)
 		if err != nil {
-			fail("TRUSTED_PROXY_CIDRS: %q ist kein gültiges Netz (z.B. 172.16.0.0/12)", raw)
+			fail("TRUSTED_PROXY_CIDRS: %q is not a valid network (e.g. 172.16.0.0/12)", raw)
 			continue
 		}
 		c.TrustedProxies = append(c.TrustedProxies, p)
@@ -107,9 +107,9 @@ func Load() (*Config, error) {
 	key, err := base64.StdEncoding.DecodeString(env("DATA_ENCRYPTION_KEY", ""))
 	switch {
 	case err != nil:
-		fail("DATA_ENCRYPTION_KEY ist kein gültiges base64 — erzeugen mit: openssl rand -base64 32")
+		fail("DATA_ENCRYPTION_KEY is not valid base64 — generate one with: openssl rand -base64 32")
 	case len(key) != 32:
-		fail("DATA_ENCRYPTION_KEY muss 32 Byte lang sein (base64-kodiert), ist %d — erzeugen mit: openssl rand -base64 32", len(key))
+		fail("DATA_ENCRYPTION_KEY must be 32 bytes (base64-encoded), got %d — generate one with: openssl rand -base64 32", len(key))
 	default:
 		c.DataEncryptionKey = key
 	}
@@ -139,16 +139,16 @@ func Load() (*Config, error) {
 		{"OIDC_REDIRECT_URI", c.OIDC.RedirectURI},
 	} {
 		if required.value == "" {
-			fail("%s muss gesetzt sein", required.name)
+			fail("%s must be set", required.name)
 		}
 	}
 	switch c.OIDC.ClaimsSource {
 	case ClaimsIDToken, ClaimsUserinfo, ClaimsBoth:
 	default:
-		fail("OIDC_CLAIMS_SOURCE muss id_token, userinfo oder both sein, ist %q", c.OIDC.ClaimsSource)
+		fail("OIDC_CLAIMS_SOURCE must be id_token, userinfo or both, got %q", c.OIDC.ClaimsSource)
 	}
 	if c.OIDC.RoleClaim == "" {
-		fail("OIDC_ROLE_CLAIM muss gesetzt sein — ohne Rollen-Claim kommt niemand hinein")
+		fail("OIDC_ROLE_CLAIM must be set — without a role claim nobody gets in")
 	}
 
 	c.PrivatePrompts = envBool("PRIVATE_PROMPTS", true, &errs)
@@ -156,16 +156,16 @@ func Load() (*Config, error) {
 	switch c.AdminPrivateAccess {
 	case AdminPrivateNone, AdminPrivateBreakGlass, AdminPrivateFull:
 	default:
-		fail("ADMIN_PRIVATE_ACCESS muss none, break-glass oder full sein, ist %q", c.AdminPrivateAccess)
+		fail("ADMIN_PRIVATE_ACCESS must be none, break-glass or full, got %q", c.AdminPrivateAccess)
 	}
 
 	c.RateLimitPerMin = envInt("RATE_LIMIT_PER_MIN", 120, &errs)
 	if c.RateLimitPerMin < 1 {
-		fail("RATE_LIMIT_PER_MIN muss mindestens 1 sein")
+		fail("RATE_LIMIT_PER_MIN must be at least 1")
 	}
 
 	if len(errs) > 0 {
-		return nil, fmt.Errorf("Konfiguration unvollständig:\n  - %s", strings.Join(errs, "\n  - "))
+		return nil, fmt.Errorf("incomplete configuration:\n  - %s", strings.Join(errs, "\n  - "))
 	}
 	return c, nil
 }
@@ -198,7 +198,7 @@ func envBool(key string, def bool, errs *[]string) bool {
 	case "0", "false", "no", "off":
 		return false
 	}
-	*errs = append(*errs, fmt.Sprintf("%s muss true/false sein, ist %q", key, raw))
+	*errs = append(*errs, fmt.Sprintf("%s must be true/false, got %q", key, raw))
 	return def
 }
 
@@ -209,7 +209,7 @@ func envDur(key string, def time.Duration, errs *[]string) time.Duration {
 	}
 	d, err := time.ParseDuration(raw)
 	if err != nil || d <= 0 {
-		*errs = append(*errs, fmt.Sprintf("%s muss eine positive Dauer sein (z.B. 12h, 15m), ist %q", key, raw))
+		*errs = append(*errs, fmt.Sprintf("%s must be a positive duration (e.g. 12h, 15m), got %q", key, raw))
 		return def
 	}
 	return d
@@ -222,7 +222,7 @@ func envInt(key string, def int, errs *[]string) int {
 	}
 	n, err := strconv.Atoi(raw)
 	if err != nil {
-		*errs = append(*errs, fmt.Sprintf("%s muss eine ganze Zahl sein, ist %q", key, raw))
+		*errs = append(*errs, fmt.Sprintf("%s must be a whole number, got %q", key, raw))
 		return def
 	}
 	return n

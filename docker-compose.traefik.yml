@@ -6,27 +6,27 @@
 # certificate resolver named "le" (rename to match your setup).
 
 services:
-  promptory-privat:
+  grimoire-personal:
     ports: !reset []
     networks: [traefik]
     labels:
       traefik.enable: "true"
       traefik.docker.network: traefik
-      traefik.http.routers.promptory-privat.rule: "Host(`prompts.example.org`)"
-      traefik.http.routers.promptory-privat.entrypoints: websecure
-      traefik.http.routers.promptory-privat.tls.certresolver: le
-      traefik.http.services.promptory-privat.loadbalancer.server.port: "8080"
+      traefik.http.routers.grimoire-personal.rule: "Host(`prompts.example.org`)"
+      traefik.http.routers.grimoire-personal.entrypoints: websecure
+      traefik.http.routers.grimoire-personal.tls.certresolver: le
+      traefik.http.services.grimoire-personal.loadbalancer.server.port: "8080"
 
-  promptory-arbeit:
+  grimoire-work:
     ports: !reset []
     networks: [traefik]
     labels:
       traefik.enable: "true"
       traefik.docker.network: traefik
-      traefik.http.routers.promptory-arbeit.rule: "Host(`prompts-arbeit.example.org`)"
-      traefik.http.routers.promptory-arbeit.entrypoints: websecure
-      traefik.http.routers.promptory-arbeit.tls.certresolver: le
-      traefik.http.services.promptory-arbeit.loadbalancer.server.port: "8080"
+      traefik.http.routers.grimoire-work.rule: "Host(`prompts-work.example.org`)"
+      traefik.http.routers.grimoire-work.entrypoints: websecure
+      traefik.http.routers.grimoire-work.tls.certresolver: le
+      traefik.http.services.grimoire-work.loadbalancer.server.port: "8080"
 
 networks:
   traefik:

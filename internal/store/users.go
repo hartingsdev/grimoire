@@ -10,7 +10,7 @@ import (
 	"github.com/hartingsdev/solid-bassoon/internal/auth"
 )
 
-var ErrNotFound = errors.New("nicht gefunden")
+var ErrNotFound = errors.New("not found")
 
 const userColumns = `id, sub, email, display_name, cached_role, cached_role_at,
 	created_at, last_login_at, deleted_at`
@@ -178,7 +178,7 @@ func (s *Store) DeleteUser(ctx context.Context, userID string, opts DeleteUserOp
 			return err
 		}
 		if n, _ := res.RowsAffected(); n == 0 {
-			return fmt.Errorf("Nutzer %s: %w", userID, ErrNotFound)
+			return fmt.Errorf("user %s: %w", userID, ErrNotFound)
 		}
 		return nil
 	})

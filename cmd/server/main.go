@@ -1,4 +1,4 @@
-// Command promptory serves the UI and the REST API of one instance on a
+// Command grimoire serves the UI and the REST API of one instance on a
 // single port.
 package main
 
@@ -25,14 +25,14 @@ import (
 
 func main() {
 	healthcheck := flag.Bool("healthcheck", false,
-		"prüft den laufenden Server und beendet sich mit 0 oder 1 (für Docker HEALTHCHECK)")
+		"probe the running server and exit 0 or 1 (for Docker HEALTHCHECK)")
 	flag.Parse()
 
 	if *healthcheck {
 		os.Exit(runHealthcheck())
 	}
 	if err := run(); err != nil {
-		fmt.Fprintln(os.Stderr, "Start fehlgeschlagen:\n"+err.Error())
+		fmt.Fprintln(os.Stderr, "startup failed:\n"+err.Error())
 		os.Exit(1)
 	}
 }
@@ -43,9 +43,9 @@ func run() error {
 		return err
 	}
 	log := newLogger(cfg.LogLevel)
-	log.Info("Instanz startet",
-		"instanz", cfg.AppInstance, "titel", cfg.AppTitle,
-		"adresse", cfg.ListenAddr, "datenbank", cfg.DBPath)
+	log.Info("instance starting",
+		"instance", cfg.AppInstance, "title", cfg.AppTitle,
+		"addr", cfg.ListenAddr, "database", cfg.DBPath)
 
 	st, err := store.Open(cfg.DBPath, cfg.DataEncryptionKey)
 	if err != nil {
@@ -88,7 +88,7 @@ func run() error {
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Info("Server hört", "adresse", cfg.ListenAddr)
+		log.Info("listening", "addr", cfg.ListenAddr)
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			errCh <- err
 		}
@@ -98,7 +98,7 @@ func run() error {
 	case err := <-errCh:
 		return err
 	case <-ctx.Done():
-		log.Info("Beenden angefordert, laufende Anfragen werden noch bedient")
+		log.Info("shutdown requested, draining in-flight requests")
 	}
 	shutdownCtx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 	defer cancel()
@@ -112,9 +112,9 @@ func staticFS(dir string, log *slog.Logger) (fs.FS, error) {
 		return web.FS, nil
 	}
 	if _, err := os.Stat(dir); err != nil {
-		return nil, fmt.Errorf("STATIC_DIR %q nicht lesbar: %w", dir, err)
+		return nil, fmt.Errorf("STATIC_DIR %q is not readable: %w", dir, err)
 	}
-	log.Warn("Oberfläche wird von der Platte geladen statt aus der Binary", "verzeichnis", dir)
+	log.Warn("serving the UI from disk instead of the binary", "dir", dir)
 	return os.DirFS(dir), nil
 }
 
@@ -148,7 +148,7 @@ func runHealthcheck() int {
 	}
 	host, port, err := net.SplitHostPort(addr)
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "LISTEN_ADDR unlesbar:", err)
+		fmt.Fprintln(os.Stderr, "cannot parse LISTEN_ADDR:", err)
 		return 1
 	}
 	if host == "" || host == "0.0.0.0" || host == "::" {
@@ -157,12 +157,12 @@ func runHealthcheck() int {
 	client := &http.Client{Timeout: 3 * time.Second}
 	resp, err := client.Get("http://" + net.JoinHostPort(host, port) + "/healthz")
 	if err != nil {
-		fmt.Fprintln(os.Stderr, "Healthcheck fehlgeschlagen:", err)
+		fmt.Fprintln(os.Stderr, "health check failed:", err)
 		return 1
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		fmt.Fprintln(os.Stderr, "Healthcheck lieferte Status", resp.StatusCode)
+		fmt.Fprintln(os.Stderr, "health check returned status", resp.StatusCode)
 		return 1
 	}
 	return 0

@@ -80,7 +80,7 @@ func (s *Server) handleListPrompts(w http.ResponseWriter, r *http.Request) {
 	case "", store.VisibilityShared, store.VisibilityPrivate:
 	default:
 		writeError(w, http.StatusBadRequest, "bad_request",
-			"visibility muss 'shared' oder 'private' sein.")
+			"visibility must be 'shared' or 'private'.")
 		return
 	}
 
@@ -131,7 +131,7 @@ func (s *Server) handleCreatePrompt(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.Title == nil || strings.TrimSpace(*in.Title) == "" ||
 		in.Body == nil || strings.TrimSpace(*in.Body) == "" {
-		writeError(w, http.StatusBadRequest, "bad_request", "title und body sind Pflichtfelder.")
+		writeError(w, http.StatusBadRequest, "bad_request", "title and body are required.")
 		return
 	}
 	visibility := store.VisibilityShared
@@ -166,14 +166,14 @@ func (s *Server) handleUpdatePrompt(w http.ResponseWriter, r *http.Request) {
 	if in.Title != nil {
 		patch.Title = strings.TrimSpace(*in.Title)
 		if patch.Title == "" {
-			writeError(w, http.StatusBadRequest, "bad_request", "title darf nicht leer sein.")
+			writeError(w, http.StatusBadRequest, "bad_request", "title must not be empty.")
 			return
 		}
 	}
 	if in.Body != nil {
 		patch.Body = *in.Body
 		if strings.TrimSpace(patch.Body) == "" {
-			writeError(w, http.StatusBadRequest, "bad_request", "body darf nicht leer sein.")
+			writeError(w, http.StatusBadRequest, "bad_request", "body must not be empty.")
 			return
 		}
 	}
@@ -262,23 +262,23 @@ func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) validatePrompt(p store.Prompt) (string, bool) {
 	if len(p.Title) > maxTitleLength {
-		return "title ist zu lang (höchstens " + strconv.Itoa(maxTitleLength) + " Zeichen).", false
+		return "title is too long (at most " + strconv.Itoa(maxTitleLength) + " characters).", false
 	}
 	if len(p.Body) > maxBodyLength {
-		return "body ist zu lang (höchstens " + strconv.Itoa(maxBodyLength) + " Zeichen).", false
+		return "body is too long (at most " + strconv.Itoa(maxBodyLength) + " characters).", false
 	}
 	if len(p.Tags) > maxTags {
-		return "höchstens " + strconv.Itoa(maxTags) + " Tags je Eintrag.", false
+		return "at most " + strconv.Itoa(maxTags) + " tags per prompt.", false
 	}
 	switch p.Visibility {
 	case "", store.VisibilityShared:
 	case store.VisibilityPrivate:
 		if !s.cfg.PrivatePrompts {
-			return "Diese Instanz ist auf PRIVATE_PROMPTS=off gestellt; " +
-				"es sind nur geteilte Einträge möglich.", false
+			return "This instance runs with PRIVATE_PROMPTS=off; only shared " +
+				"prompts are possible.", false
 		}
 	default:
-		return "visibility muss 'shared' oder 'private' sein.", false
+		return "visibility must be 'shared' or 'private'.", false
 	}
 	return "", true
 }

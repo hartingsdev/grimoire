@@ -10,14 +10,14 @@ import (
 
 // TombstoneName stands in wherever a deleted user appears as an author. The
 // row survives so history does not tear.
-const TombstoneName = "Gelöschter Nutzer"
+const TombstoneName = "Deleted user"
 
 type User struct {
 	ID           string
 	Sub          string // leer bei einer Grabstein-Zeile
 	Email        string
 	DisplayName  string
-	CachedRole   auth.Role // Cache aus dem IdP, nicht autoritativ
+	CachedRole   auth.Role // cache from the IdP, not authoritative
 	CachedRoleAt time.Time
 	CreatedAt    time.Time
 	LastLoginAt  time.Time
@@ -127,7 +127,7 @@ type AuditEntry struct {
 func newID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		panic("Zufallsquelle nicht verfügbar: " + err.Error())
+		panic("no source of randomness: " + err.Error())
 	}
 	ms := uint64(time.Now().UnixMilli())
 	b[0] = byte(ms >> 40)
@@ -146,7 +146,7 @@ func newID() string {
 func NewToken() string {
 	var b [32]byte
 	if _, err := rand.Read(b[:]); err != nil {
-		panic("Zufallsquelle nicht verfügbar: " + err.Error())
+		panic("no source of randomness: " + err.Error())
 	}
 	return hex.EncodeToString(b[:])
 }

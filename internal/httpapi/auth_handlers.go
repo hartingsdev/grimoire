@@ -23,9 +23,9 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	client, err := s.provider.Client()
 	if err != nil {
-		s.log.Warn("Login nicht möglich, Provider nicht erreichbar", "fehler", err)
-		s.htmlMessage(w, http.StatusServiceUnavailable, "Anmeldung derzeit nicht möglich",
-			"Der Anmeldedienst ist nicht erreichbar. Bitte in einem Moment erneut versuchen.")
+		s.log.Warn("login unavailable, provider unreachable", "error", err)
+		s.htmlMessage(w, http.StatusServiceUnavailable, "Sign-in currently unavailable",
+			"The identity provider is not reachable. Please try again in a moment.")
 		return
 	}
 
@@ -42,16 +42,16 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	if providerError := query.Get("error"); providerError != "" {
-		s.log.Warn("Provider hat den Login abgelehnt",
-			"fehler", providerError, "beschreibung", query.Get("error_description"))
-		s.htmlMessage(w, http.StatusForbidden, "Anmeldung abgebrochen",
-			"Der Anmeldedienst hat die Anmeldung abgelehnt: "+providerError)
+		s.log.Warn("provider rejected the login",
+			"error", providerError, "description", query.Get("error_description"))
+		s.htmlMessage(w, http.StatusForbidden, "Sign-in cancelled",
+			"The identity provider rejected the sign-in: "+providerError)
 		return
 	}
 	client, err := s.provider.Client()
 	if err != nil {
-		s.htmlMessage(w, http.StatusServiceUnavailable, "Anmeldung derzeit nicht möglich",
-			"Der Anmeldedienst ist nicht erreichbar.")
+		s.htmlMessage(w, http.StatusServiceUnavailable, "Sign-in currently unavailable",
+			"The identity provider is not reachable.")
 		return
 	}
 
@@ -59,33 +59,33 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 	nonce, verifier, redirectTo, err := s.store.TakeOAuthState(r.Context(), query.Get("state"), now)
 	if err != nil {
 		// Clicking the same link twice lands here too: a state is single-use.
-		s.htmlMessage(w, http.StatusBadRequest, "Anmeldung abgelaufen",
-			"Dieser Anmeldevorgang ist nicht mehr gültig. Bitte erneut anmelden.")
+		s.htmlMessage(w, http.StatusBadRequest, "Sign-in expired",
+			"This sign-in is no longer valid. Please sign in again.")
 		return
 	}
 
 	identity, token, err := client.Exchange(r.Context(), query.Get("code"), verifier, nonce)
 	if err != nil {
-		s.log.Warn("Code-Einlösung fehlgeschlagen", "fehler", err)
-		s.htmlMessage(w, http.StatusForbidden, "Anmeldung fehlgeschlagen",
-			"Die Anmeldung konnte nicht abgeschlossen werden.")
+		s.log.Warn("code exchange failed", "error", err)
+		s.htmlMessage(w, http.StatusForbidden, "Sign-in failed",
+			"The sign-in could not be completed.")
 		return
 	}
 	if identity.Subject == "" {
-		s.htmlMessage(w, http.StatusForbidden, "Anmeldung fehlgeschlagen",
-			"Der Anmeldedienst hat keine Kennung (sub) geliefert.")
+		s.htmlMessage(w, http.StatusForbidden, "Sign-in failed",
+			"The identity provider returned no subject (sub).")
 		return
 	}
 
 	// The claim decides access, not any record in the app. Without a role it
 	// ends here, and no account is created.
 	if !identity.Role.Valid() {
-		s.log.Info("Anmeldung ohne passende Rolle abgelehnt",
+		s.log.Info("sign-in refused, no matching role",
 			"sub", identity.Subject, "claim", s.cfg.OIDC.RoleClaim)
-		s.htmlMessage(w, http.StatusForbidden, "Kein Zugriff",
-			fmt.Sprintf("Dein Konto hat für diese Instanz keine Rolle. "+
-				"Nötig ist ein passender Wert im Claim %q deines Anmeldedienstes. "+
-				"Wende dich an die Administration.", s.cfg.OIDC.RoleClaim))
+		s.htmlMessage(w, http.StatusForbidden, "No access",
+			fmt.Sprintf("Your account has no role for this instance. It needs a "+
+				"matching value in the %q claim from your identity provider. "+
+				"Please contact an administrator.", s.cfg.OIDC.RoleClaim))
 		return
 	}
 
@@ -103,7 +103,7 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	s.setSessionCookie(w, sess.ID, s.cfg.SessionMaxAge)
-	s.log.Info("Anmeldung erfolgreich", "nutzer", user.ID, "rolle", string(identity.Role))
+	s.log.Info("sign-in succeeded", "user", user.ID, "role", string(identity.Role))
 	http.Redirect(w, r, redirectTo, http.StatusFound)
 }
 
@@ -113,7 +113,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
 	if p != nil && p.SessionID != "" {
 		if err := s.store.DeleteSession(r.Context(), p.SessionID); err != nil {
-			s.log.Warn("Sitzung konnte nicht gelöscht werden", "fehler", err)
+			s.log.Warn("could not delete session", "error", err)
 		}
 	}
 	s.clearSessionCookie(w)
@@ -151,7 +151,7 @@ func (s *Server) htmlMessage(w http.ResponseWriter, status int, title, message s
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)
 	fmt.Fprintf(w, `<!doctype html>
-<html lang="de"><head><meta charset="utf-8">
+<html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>%s – %s</title>
 <style>
@@ -161,7 +161,7 @@ func (s *Server) htmlMessage(w http.ResponseWriter, status int, title, message s
  p{margin:0 0 1.5rem;opacity:.85}
  a{color:inherit}
 </style></head><body>
-<h1>%s</h1><p>%s</p><p><a href="/">Zurück zur Übersicht</a></p>
+<h1>%s</h1><p>%s</p><p><a href="/">Back to the library</a></p>
 </body></html>`,
 		html.EscapeString(title), html.EscapeString(s.cfg.AppTitle),
 		html.EscapeString(title), html.EscapeString(message))

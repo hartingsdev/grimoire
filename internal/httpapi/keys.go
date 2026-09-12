@@ -40,18 +40,18 @@ func toKeyJSON(k store.APIKey, now time.Time) apiKeyJSON {
 	}
 	switch {
 	case k.Revoked():
-		out.Status, out.StatusNote = "revoked", "Widerrufen."
+		out.Status, out.StatusNote = "revoked", "Revoked."
 	case k.Expired(now):
-		out.Status, out.StatusNote = "expired", "Abgelaufen."
+		out.Status, out.StatusNote = "expired", "Expired."
 	case !k.EffectiveRole.Valid():
 		// Not revoked but ineffective: the owner has no access right now, or
 		// has not signed in for too long. Reversible.
 		out.Status = "inactive"
-		out.StatusNote = "Inaktiv – der Besitzer hat derzeit keinen Zugang."
+		out.StatusNote = "Inactive — the owner currently has no access."
 	case k.EffectiveRole != k.Role:
 		out.Status = "reduced"
-		out.StatusNote = "Eingeschränkt auf " + k.EffectiveRole.Label() +
-			", weil der Besitzer nur noch diese Rolle hat."
+		out.StatusNote = "Limited to " + k.EffectiveRole.Label() +
+			" because that is all the owner still has."
 	default:
 		out.Status, out.StatusNote = "active", ""
 	}
@@ -66,7 +66,7 @@ func (s *Server) handleListKeys(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Query().Get("all") == "1" {
 		if !p.Can(auth.CapAdminRead) {
 			writeError(w, http.StatusForbidden, "forbidden",
-				"Nur Administratoren sehen fremde Keys.")
+				"Only administrators can see other people's keys.")
 			return
 		}
 		ownerFilter = ""
@@ -101,22 +101,22 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 	in.Name = strings.TrimSpace(in.Name)
 	if in.Name == "" || len(in.Name) > 120 {
 		writeError(w, http.StatusBadRequest, "bad_request",
-			"name ist ein Pflichtfeld (höchstens 120 Zeichen) — er soll den Zweck erkennen lassen.")
+			"name is required (at most 120 characters) and should say what the key is for.")
 		return
 	}
 	role := auth.ParseRole(in.Role)
 	switch {
 	case !role.Valid():
-		writeError(w, http.StatusBadRequest, "bad_request", "role muss 'viewer' oder 'editor' sein.")
+		writeError(w, http.StatusBadRequest, "bad_request", "role must be 'viewer' or 'editor'.")
 		return
 	case role == auth.RoleAdmin:
 		// There are no admin keys. Management happens in the browser only.
 		writeError(w, http.StatusBadRequest, "bad_request",
-			"Für Keys gibt es die Rolle 'admin' nicht: Keys können weder Keys noch Nutzer verwalten.")
+			"There is no 'admin' role for keys: keys can manage neither keys nor users.")
 		return
 	case role.Rank() > p.Role.Rank():
 		writeError(w, http.StatusForbidden, "forbidden",
-			"Ein Key kann nicht mehr dürfen als du selbst. Deine Rolle: "+p.Role.Label()+".")
+			"A key cannot outrank you. Your role: "+p.Role.Label()+".")
 		return
 	}
 
@@ -127,7 +127,7 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 	}
 	if in.ExpiresInDays > maxDays {
 		writeError(w, http.StatusBadRequest, "bad_request",
-			"expiresInDays überschreitet die für diese Instanz erlaubte Höchstdauer.")
+			"expiresInDays exceeds the maximum lifetime allowed on this instance.")
 		return
 	}
 	expiresAt := now.AddDate(0, 0, in.ExpiresInDays)
@@ -150,7 +150,7 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		"key": toKeyJSON(key, now),
 		// The only place the plaintext leaves the application.
 		"plaintext": plaintext,
-		"hinweis":   "Dieser Key wird nur jetzt angezeigt. Danach ist er nicht mehr abrufbar.",
+		"note":      "This key is shown only now. Afterwards it cannot be retrieved, only revoked.",
 	})
 }
 
@@ -158,11 +158,11 @@ func (s *Server) handleRevokeKey(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
 	ownerFilter := p.UserID
 	if p.Can(auth.CapAdminUsers) {
-		ownerFilter = "" // Admins dürfen jeden Key widerrufen
+		ownerFilter = "" // admins may revoke any key
 	}
 	reason := strings.TrimSpace(r.URL.Query().Get("reason"))
 	if reason == "" {
-		reason = "über die Oberfläche widerrufen"
+		reason = "revoked from the UI"
 	}
 	id := r.PathValue("id")
 	if err := s.store.RevokeAPIKey(r.Context(), id, ownerFilter, reason, time.Now()); err != nil {
@@ -180,6 +180,6 @@ func (s *Server) audit(r *http.Request, e store.AuditEntry) {
 		e.ActorID, e.ActorKind = p.UserID, string(p.Kind)
 	}
 	if err := s.store.Audit(r.Context(), e); err != nil {
-		s.log.Error("Protokolleintrag nicht geschrieben", "aktion", e.Action, "fehler", err)
+		s.log.Error("could not write audit entry", "action", e.Action, "error", err)
 	}
 }

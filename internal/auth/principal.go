@@ -18,7 +18,7 @@ type Principal struct {
 	SessionID string
 	CSRFToken string
 	KeyID     string
-	KeyRole   Role // ursprüngliche Rolle des Keys, nur zur Anzeige/Diagnose
+	KeyRole   Role // the key's own role, for display and diagnosis only
 
 	caps CapSet
 }

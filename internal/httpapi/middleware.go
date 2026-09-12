@@ -42,7 +42,7 @@ func (s *Server) guard(route Route, h http.HandlerFunc) http.Handler {
 		}
 		if principal == nil {
 			writeError(w, http.StatusUnauthorized, "unauthorized",
-				"Anmeldung erforderlich. Im Browser über /auth/login, für Skripte per Authorization: Bearer <key>.")
+				"Authentication required. In a browser via /auth/login, for scripts via Authorization: Bearer <key>.")
 			return
 		}
 		if route.Access == AccessCapability && !principal.Can(route.Cap) {
@@ -54,7 +54,7 @@ func (s *Server) guard(route Route, h http.HandlerFunc) http.Handler {
 		if principal.Kind == auth.KindSession && !safeMethod(r.Method) {
 			if r.Header.Get(csrfHeader) != principal.CSRFToken {
 				writeError(w, http.StatusForbidden, "csrf",
-					"CSRF-Token fehlt oder passt nicht. Die Seite neu laden.")
+					"CSRF token missing or mismatched. Reload the page.")
 				return
 			}
 		}
@@ -67,17 +67,17 @@ func (s *Server) denied(w http.ResponseWriter, p *auth.Principal, route Route) {
 		for _, managed := range auth.ManagementCapabilities {
 			if route.Cap == managed {
 				writeError(w, http.StatusForbidden, "forbidden_for_api_key",
-					"Dieser Endpunkt ist nur nach Anmeldung im Browser erreichbar. "+
-						"API-Keys können weder Keys noch Nutzer verwalten.")
+					"This endpoint is reachable only after signing in with a browser. "+
+						"API keys can manage neither keys nor users.")
 				return
 			}
 		}
 		writeError(w, http.StatusForbidden, "forbidden",
-			"Dieser Key darf nur lesen. Für Schreibzugriffe wird ein Key mit der Rolle 'editor' benötigt.")
+			"This key may only read. Writing needs a key with the 'editor' role.")
 		return
 	}
 	writeError(w, http.StatusForbidden, "forbidden",
-		"Dafür fehlt dir die Berechtigung. Deine Rolle: "+p.Role.Label()+".")
+		"You do not have permission for that. Your role: "+p.Role.Label()+".")
 }
 
 func safeMethod(m string) bool {
@@ -102,38 +102,38 @@ func (s *Server) authenticateAPIKey(w http.ResponseWriter, r *http.Request, head
 	raw, ok := strings.CutPrefix(header, "Bearer ")
 	if !ok {
 		writeError(w, http.StatusUnauthorized, "unauthorized",
-			"Erwartet wird: Authorization: Bearer <key>")
+			"Expected: Authorization: Bearer <key>")
 		return nil, false
 	}
 	// 1+2: prefix and instance, still without touching the database.
 	id, secret, err := auth.ParseKey(s.cfg.AppInstance, strings.TrimSpace(raw))
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "invalid_key",
-			"Der Key ist ungültig oder gehört zu einer anderen Instanz.")
+			"The key is invalid or belongs to a different instance.")
 		return nil, false
 	}
 	// 3: index lookup.
 	key, hash, owner, err := s.store.LookupAPIKey(r.Context(), id)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
-			s.log.Error("Key konnte nicht nachgeschlagen werden", "key", auth.MaskKeyID(id), "fehler", err)
+			s.log.Error("key lookup failed", "key", auth.MaskKeyID(id), "error", err)
 		}
-		writeError(w, http.StatusUnauthorized, "invalid_key", "Der Key ist ungültig.")
+		writeError(w, http.StatusUnauthorized, "invalid_key", "The key is invalid.")
 		return nil, false
 	}
 	// 4: compare the secret in constant time.
 	if !auth.SecretMatches(secret, hash) {
-		writeError(w, http.StatusUnauthorized, "invalid_key", "Der Key ist ungültig.")
+		writeError(w, http.StatusUnauthorized, "invalid_key", "The key is invalid.")
 		return nil, false
 	}
 	now := time.Now()
 	// 5: revocation and expiry.
 	if key.Revoked() {
-		writeError(w, http.StatusUnauthorized, "key_revoked", "Dieser Key wurde widerrufen.")
+		writeError(w, http.StatusUnauthorized, "key_revoked", "This key has been revoked.")
 		return nil, false
 	}
 	if key.Expired(now) {
-		writeError(w, http.StatusUnauthorized, "key_expired", "Dieser Key ist abgelaufen.")
+		writeError(w, http.StatusUnauthorized, "key_expired", "This key has expired.")
 		return nil, false
 	}
 	// 6: per-key rate limit.
@@ -142,7 +142,7 @@ func (s *Server) authenticateAPIKey(w http.ResponseWriter, r *http.Request, head
 	if !res.Allowed {
 		w.Header().Set("Retry-After", strconv.Itoa(int(res.RetryAfter.Seconds()+1)))
 		writeError(w, http.StatusTooManyRequests, "rate_limited",
-			"Zu viele Anfragen. Die RateLimit-Header nennen das erlaubte Tempo.")
+			"Too many requests. The RateLimit headers state the allowed pace.")
 		return nil, false
 	}
 	// 7: min(key role, owner's current role), staleness included.
@@ -150,11 +150,11 @@ func (s *Server) authenticateAPIKey(w http.ResponseWriter, r *http.Request, head
 		s.cfg.OwnerStaleAfter, now)
 	if !effective.Valid() || owner.Deleted() {
 		writeError(w, http.StatusUnauthorized, "owner_inactive",
-			"Der Besitzer dieses Keys hat derzeit keinen Zugang. Der Key ist dadurch inaktiv.")
+			"The owner of this key currently has no access, so the key is inactive.")
 		return nil, false
 	}
 	if err := s.store.TouchAPIKey(r.Context(), key.ID, now, keyTouchInterval); err != nil {
-		s.log.Warn("zuletzt-genutzt konnte nicht geschrieben werden", "key", auth.MaskKeyID(key.ID), "fehler", err)
+		s.log.Warn("could not record last-used", "key", auth.MaskKeyID(key.ID), "error", err)
 	}
 	// 8: principal — past here no handler tells a key from a session.
 	return &auth.Principal{
@@ -172,7 +172,7 @@ func (s *Server) authenticateSession(w http.ResponseWriter, r *http.Request, id 
 	sess, user, err := s.store.GetSession(ctx, id, now)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
-			s.log.Error("Sitzung konnte nicht gelesen werden", "fehler", err)
+			s.log.Error("could not read session", "error", err)
 		}
 		s.clearSessionCookie(w)
 		return nil
@@ -186,7 +186,7 @@ func (s *Server) authenticateSession(w http.ResponseWriter, r *http.Request, id 
 		sess.Role = role
 	}
 	if err := s.store.TouchSession(ctx, sess.ID, now); err != nil {
-		s.log.Warn("Sitzungszeitstempel nicht geschrieben", "fehler", err)
+		s.log.Warn("could not update session timestamp", "error", err)
 	}
 	if !sess.Role.Valid() {
 		s.clearSessionCookie(w)
@@ -207,7 +207,7 @@ func (s *Server) authenticateSession(w http.ResponseWriter, r *http.Request, id 
 func (s *Server) revalidate(ctx context.Context, sess store.Session, user store.User, now time.Time) (auth.Role, bool) {
 	client, err := s.provider.Client()
 	if err != nil {
-		s.log.Warn("Revalidierung übersprungen, Provider nicht erreichbar", "fehler", err)
+		s.log.Warn("revalidation skipped, provider unreachable", "error", err)
 		s.deferRevalidation(ctx, sess, now)
 		return sess.Role, true
 	}
@@ -218,32 +218,32 @@ func (s *Server) revalidate(ctx context.Context, sess store.Session, user store.
 	})
 	switch {
 	case errors.Is(err, auth.ErrSessionEndedAtProvider):
-		s.log.Info("Sitzung beim Provider beendet", "nutzer", user.ID)
+		s.log.Info("session ended at the provider", "user", user.ID)
 		s.store.DeleteSession(ctx, sess.ID)
 		return auth.RoleNone, false
 	case errors.Is(err, auth.ErrProviderUnavailable):
-		s.log.Warn("Revalidierung fehlgeschlagen, Sitzung bleibt bestehen", "fehler", err)
+		s.log.Warn("revalidation failed, session kept", "error", err)
 		s.deferRevalidation(ctx, sess, now)
 		return sess.Role, true
 	case err != nil:
-		s.log.Error("Revalidierung mit unerwartetem Fehler", "fehler", err)
+		s.log.Error("revalidation failed unexpectedly", "error", err)
 		s.deferRevalidation(ctx, sess, now)
 		return sess.Role, true
 	}
 
 	// From here the answer is authoritative.
 	if err := s.store.SetCachedRole(ctx, user.ID, identity.Role, now); err != nil {
-		s.log.Error("Rollen-Cache nicht geschrieben", "fehler", err)
+		s.log.Error("could not update cached role", "error", err)
 	}
 	if !identity.Role.Valid() {
-		s.log.Info("Zugang entzogen, alle Sitzungen beendet", "nutzer", user.ID)
+		s.log.Info("access withdrawn, all sessions ended", "user", user.ID)
 		s.store.DeleteSessionsForUser(ctx, user.ID)
 		return auth.RoleNone, false
 	}
 	if err := s.store.UpdateSessionAfterRevalidation(ctx, sess.ID, identity.Role,
 		fresh.AccessToken, fresh.RefreshToken, fresh.Expiry,
 		now.Add(s.cfg.RevalidateInterval)); err != nil {
-		s.log.Error("Sitzung nach Revalidierung nicht aktualisiert", "fehler", err)
+		s.log.Error("could not update session after revalidation", "error", err)
 	}
 	return identity.Role, true
 }
@@ -311,11 +311,11 @@ func (s *Server) withLogging(next http.Handler) http.Handler {
 		next.ServeHTTP(sw, r)
 
 		attrs := []any{
-			"methode", r.Method, "pfad", r.URL.Path, "status", sw.status,
-			"dauer_ms", time.Since(start).Milliseconds(), "ip", s.clientIP(r),
+			"method", r.Method, "path", r.URL.Path, "status", sw.status,
+			"duration_ms", time.Since(start).Milliseconds(), "ip", s.clientIP(r),
 		}
 		if p := auth.FromContext(r.Context()); p != nil {
-			attrs = append(attrs, "principal", string(p.Kind), "rolle", string(p.Role))
+			attrs = append(attrs, "principal", string(p.Kind), "role", string(p.Role))
 			if p.KeyID != "" {
 				attrs = append(attrs, "key", auth.MaskKeyID(p.KeyID))
 			}
@@ -328,9 +328,9 @@ func (s *Server) withRecovery(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		defer func() {
 			if rec := recover(); rec != nil {
-				s.log.Error("Panik im Handler", "pfad", r.URL.Path,
-					"fehler", rec, "stack", string(debug.Stack()))
-				writeError(w, http.StatusInternalServerError, "internal", "Unerwarteter Fehler.")
+				s.log.Error("panic in handler", "path", r.URL.Path,
+					"error", rec, "stack", string(debug.Stack()))
+				writeError(w, http.StatusInternalServerError, "internal", "Unexpected error.")
 			}
 		}()
 		next.ServeHTTP(w, r)

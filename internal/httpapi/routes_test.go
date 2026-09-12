@@ -30,7 +30,7 @@ func testServer(t *testing.T) (*Server, *store.Store, *config.Config) {
 	t.Cleanup(func() { st.Close() })
 
 	cfg := &config.Config{
-		AppTitle: "Test", AppInstance: "privat", BaseURL: "http://localhost",
+		AppTitle: "Test", AppInstance: "personal", BaseURL: "http://localhost",
 		SessionMaxAge: time.Hour, RevalidateInterval: time.Hour,
 		OwnerStaleAfter: 720 * time.Hour, APIKeyMaxLifetime: 8760 * time.Hour,
 		RateLimitPerMin: 120, PrivatePrompts: true,
@@ -60,7 +60,7 @@ func mustKey(t *testing.T, st *store.Store, sub string, userRole, keyRole auth.R
 	if err != nil {
 		t.Fatal(err)
 	}
-	plaintext, _, err := st.CreateAPIKey(t.Context(), "privat", "Test", keyRole,
+	plaintext, _, err := st.CreateAPIKey(t.Context(), "personal", "Test", keyRole,
 		u.ID, now.Add(24*time.Hour), now)
 	if err != nil {
 		t.Fatal(err)
@@ -98,11 +98,11 @@ func TestEveryRouteDeclaresItsProtection(t *testing.T) {
 		t.Fatal(err)
 	}
 	if len(srv.Routes()) == 0 {
-		t.Fatal("keine Routen registriert")
+		t.Fatal("no routes registered")
 	}
 	for _, r := range srv.Routes() {
 		if r.Access == AccessCapability && r.Cap == "" {
-			t.Errorf("Route %s %s verlangt eine Fähigkeit, nennt aber keine", r.Method, r.Pattern)
+			t.Errorf("route %s %s requires a capability but names none", r.Method, r.Pattern)
 		}
 	}
 }
@@ -123,7 +123,7 @@ func TestNoRouteGrantsManagementCapabilityToAPIKey(t *testing.T) {
 			}
 			for _, managed := range auth.ManagementCapabilities {
 				if route.Cap == managed {
-					t.Errorf("Route %s %s gibt einem API-Key (Rolle %s) das Recht %s",
+					t.Errorf("route %s %s grants an API key (role %s) the capability %s",
 						route.Method, route.Pattern, role, route.Cap)
 				}
 			}
@@ -159,16 +159,16 @@ func TestManagementRoutesRejectAPIKeysOverHTTP(t *testing.T) {
 		}
 		w := do(t, srv, route.Method, path, key, body)
 		if w.Code != http.StatusForbidden {
-			t.Errorf("%s %s mit API-Key: Status %d, erwartet 403",
+			t.Errorf("%s %s with an API key: status %d, want 403",
 				route.Method, path, w.Code)
 		}
 		if !strings.Contains(w.Body.String(), "forbidden_for_api_key") {
-			t.Errorf("%s %s: Fehlercode nennt den Grund nicht: %s",
+			t.Errorf("%s %s: error code does not state the reason: %s",
 				route.Method, path, w.Body.String())
 		}
 	}
 	if checked == 0 {
-		t.Fatal("keine Verwaltungsroute geprüft — der Test läuft ins Leere")
+		t.Fatal("no management route was checked — this test is vacuous")
 	}
 }
 
@@ -180,13 +180,13 @@ func TestViewerKeyCannotWrite(t *testing.T) {
 
 	body := `{"title":"Test","body":"Inhalt"}`
 	if w := do(t, srv, "POST", "/api/v1/prompts", viewer, body); w.Code != http.StatusForbidden {
-		t.Errorf("Lese-Key durfte schreiben: Status %d", w.Code)
+		t.Errorf("read key was allowed to write: status %d", w.Code)
 	}
 	if w := do(t, srv, "GET", "/api/v1/prompts", viewer); w.Code != http.StatusOK {
-		t.Errorf("Lese-Key durfte nicht lesen: Status %d", w.Code)
+		t.Errorf("read key was not allowed to read: status %d", w.Code)
 	}
 	if w := do(t, srv, "POST", "/api/v1/prompts", editor, body); w.Code != http.StatusCreated {
-		t.Errorf("Schreib-Key konnte nicht anlegen: Status %d, %s", w.Code, w.Body.String())
+		t.Errorf("write key could not create: status %d, %s", w.Code, w.Body.String())
 	}
 }
 
@@ -197,7 +197,7 @@ func TestKeyFollowsOwnerDowngrade(t *testing.T) {
 	key := mustKey(t, st, "anna", auth.RoleEditor, auth.RoleEditor)
 	body := `{"title":"Test","body":"Inhalt"}`
 	if w := do(t, srv, "POST", "/api/v1/prompts", key, body); w.Code != http.StatusCreated {
-		t.Fatalf("Vorbedingung: Status %d", w.Code)
+		t.Fatalf("precondition: status %d", w.Code)
 	}
 
 	users, _ := st.ListUsers(t.Context())
@@ -205,10 +205,10 @@ func TestKeyFollowsOwnerDowngrade(t *testing.T) {
 		t.Fatal(err)
 	}
 	if w := do(t, srv, "POST", "/api/v1/prompts", key, body); w.Code != http.StatusForbidden {
-		t.Errorf("Schreib-Key eines herabgestuften Besitzers durfte noch schreiben: %d", w.Code)
+		t.Errorf("write key of a demoted owner could still write: %d", w.Code)
 	}
 	if w := do(t, srv, "GET", "/api/v1/prompts", key); w.Code != http.StatusOK {
-		t.Errorf("Lesen sollte weiterhin möglich sein: %d", w.Code)
+		t.Errorf("reading should still work: %d", w.Code)
 	}
 
 	// Access withdrawn entirely: the key goes inactive, not revoked.
@@ -217,10 +217,10 @@ func TestKeyFollowsOwnerDowngrade(t *testing.T) {
 	}
 	w := do(t, srv, "GET", "/api/v1/prompts", key)
 	if w.Code != http.StatusUnauthorized {
-		t.Errorf("Key ohne berechtigten Besitzer: Status %d, erwartet 401", w.Code)
+		t.Errorf("key without an entitled owner: status %d, want 401", w.Code)
 	}
 	if !strings.Contains(w.Body.String(), "owner_inactive") {
-		t.Errorf("Grund nicht genannt: %s", w.Body.String())
+		t.Errorf("reason not stated: %s", w.Body.String())
 	}
 }
 
@@ -231,19 +231,19 @@ func TestKeyRejections(t *testing.T) {
 	tests := []struct {
 		name, key, wantCode string
 	}{
-		{"ohne Key", "", "unauthorized"},
-		{"Unsinn", "voellig-falsch", "invalid_key"},
-		{"falsche Instanz", strings.Replace(good, "_privat_", "_arbeit_", 1), "invalid_key"},
-		{"unbekannte ID", good[:len(good)-8] + "AAAAAAAA", "invalid_key"},
+		{"no key", "", "unauthorized"},
+		{"nonsense", "utter-nonsense", "invalid_key"},
+		{"wrong instance", strings.Replace(good, "_personal_", "_work_", 1), "invalid_key"},
+		{"unknown id", good[:len(good)-8] + "AAAAAAAA", "invalid_key"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
 			w := do(t, srv, "GET", "/api/v1/prompts", tc.key)
 			if w.Code != http.StatusUnauthorized {
-				t.Fatalf("Status %d, erwartet 401", w.Code)
+				t.Fatalf("status %d, want 401", w.Code)
 			}
 			if !strings.Contains(w.Body.String(), tc.wantCode) {
-				t.Errorf("Fehlercode %q erwartet, bekam: %s", tc.wantCode, w.Body.String())
+				t.Errorf("want error code %q, got: %s", tc.wantCode, w.Body.String())
 			}
 		})
 	}
@@ -256,7 +256,7 @@ func TestKeyInQueryParameterIsIgnored(t *testing.T) {
 	key := mustKey(t, st, "anna", auth.RoleEditor, auth.RoleViewer)
 	w := do(t, srv, "GET", "/api/v1/prompts?api_key="+key, "")
 	if w.Code != http.StatusUnauthorized {
-		t.Errorf("Key im Query-Parameter wurde akzeptiert: Status %d", w.Code)
+		t.Errorf("key in a query parameter was accepted: status %d", w.Code)
 	}
 }
 
@@ -271,10 +271,10 @@ func TestRateLimitHeadersAndBlocking(t *testing.T) {
 		last = do(t, srv, "GET", "/api/v1/prompts", key)
 	}
 	if last.Code != http.StatusTooManyRequests {
-		t.Errorf("vierte Anfrage: Status %d, erwartet 429", last.Code)
+		t.Errorf("fourth request: status %d, want 429", last.Code)
 	}
 	if last.Header().Get("Retry-After") == "" {
-		t.Error("Retry-After fehlt")
+		t.Error("Retry-After is missing")
 	}
 	if last.Header().Get("RateLimit-Limit") != "3" {
 		t.Errorf("RateLimit-Limit = %q", last.Header().Get("RateLimit-Limit"))
@@ -284,11 +284,11 @@ func TestRateLimitHeadersAndBlocking(t *testing.T) {
 func TestHealthAndReadiness(t *testing.T) {
 	srv, _, _ := testServer(t)
 	if w := do(t, srv, "GET", "/healthz", ""); w.Code != http.StatusOK {
-		t.Errorf("/healthz: Status %d", w.Code)
+		t.Errorf("/healthz: status %d", w.Code)
 	}
 	// Without a reachable provider the instance is not ready.
 	if w := do(t, srv, "GET", "/readyz", ""); w.Code != http.StatusServiceUnavailable {
-		t.Errorf("/readyz ohne Provider: Status %d, erwartet 503", w.Code)
+		t.Errorf("/readyz without a provider: status %d, want 503", w.Code)
 	}
 }
 
@@ -306,7 +306,7 @@ func TestBreakGlassIsAuditedAndVisibleToOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 	priv, err := st.CreatePrompt(t.Context(), store.Prompt{
-		Title: "Geheim", Body: "nur für anna", Visibility: store.VisibilityPrivate,
+		Title: "Secret", Body: "for anna only", Visibility: store.VisibilityPrivate,
 	}, anna.ID, now)
 	if err != nil {
 		t.Fatal(err)
@@ -315,26 +315,26 @@ func TestBreakGlassIsAuditedAndVisibleToOwner(t *testing.T) {
 	// No reason, no reveal.
 	w := call(t, srv, "POST", "/api/v1/admin/prompts/"+priv.ID+"/reveal", admin, `{"reason":""}`)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "reason_required") {
-		t.Errorf("Freischaltung ohne Begründung: Status %d, %s", w.Code, w.Body.String())
+		t.Errorf("reveal without a reason: status %d, %s", w.Code, w.Body.String())
 	}
 
 	w = call(t, srv, "POST", "/api/v1/admin/prompts/"+priv.ID+"/reveal", admin,
-		`{"reason":"Verdacht auf Weitergabe von Kundendaten"}`)
+		`{"reason":"suspected leak of customer data"}`)
 	if w.Code != http.StatusOK {
-		t.Fatalf("Freischaltung mit Begründung: Status %d, %s", w.Code, w.Body.String())
+		t.Fatalf("reveal with a reason: status %d, %s", w.Code, w.Body.String())
 	}
-	if !strings.Contains(w.Body.String(), "nur für anna") {
-		t.Error("Inhalt wurde nicht geliefert")
+	if !strings.Contains(w.Body.String(), "for anna only") {
+		t.Error("the body was not returned")
 	}
 
 	// The owner sees it in their own audit trail.
 	w = call(t, srv, "GET", "/api/v1/me/audit", anna, "")
 	if w.Code != http.StatusOK {
-		t.Fatalf("eigenes Protokoll: Status %d", w.Code)
+		t.Fatalf("own audit trail: status %d", w.Code)
 	}
 	if !strings.Contains(w.Body.String(), store.ActionPrivateRevealed) ||
-		!strings.Contains(w.Body.String(), "Kundendaten") {
-		t.Errorf("Besitzer sieht die Freischaltung nicht: %s", w.Body.String())
+		!strings.Contains(w.Body.String(), "customer data") {
+		t.Errorf("the owner cannot see the reveal: %s", w.Body.String())
 	}
 }
 
@@ -381,6 +381,6 @@ func TestSessionWriteRequiresCSRFToken(t *testing.T) {
 	w := httptest.NewRecorder()
 	srv.ServeHTTP(w, r)
 	if w.Code != http.StatusForbidden || !strings.Contains(w.Body.String(), "csrf") {
-		t.Errorf("Schreibzugriff ohne CSRF-Token: Status %d, %s", w.Code, w.Body.String())
+		t.Errorf("write without a CSRF token: status %d, %s", w.Code, w.Body.String())
 	}
 }

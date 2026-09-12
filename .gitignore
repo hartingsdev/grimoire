@@ -2,11 +2,11 @@
 *.db
 *.db-shm
 *.db-wal
-/promptory
-# Echte Instanz-Konfigurationen enthalten Geheimnisse und bleiben außerhalb von
-# git. Versioniert sind nur die Vorlagen.
+/grimoire
+# Real instance configurations carry secrets and stay out of git.
+# Only the templates are versioned.
 /.env
-/.env.privat
-/.env.arbeit
+/.env.personal
+/.env.work
 /.env.local
 !*.example

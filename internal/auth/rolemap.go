@@ -9,8 +9,8 @@ import (
 // the app is not tied to one provider:
 //
 //	groups                           Authentik, Authelia
-//	promptory_role                   custom claim, granted per application
-//	resource_access.promptory.roles  Keycloak
+//	grimoire_role                   custom claim, granted per application
+//	resource_access.grimoire.roles  Keycloak
 //
 // With an empty Map the claim value is taken as the role name directly. If the
 // claim carries several values, the highest role wins.
@@ -24,7 +24,7 @@ type RoleMapper struct {
 func NewRoleMapper(claimPath, rawMap string) (*RoleMapper, error) {
 	path := strings.Split(strings.TrimSpace(claimPath), ".")
 	if len(path) == 0 || path[0] == "" {
-		return nil, fmt.Errorf("OIDC_ROLE_CLAIM ist leer")
+		return nil, fmt.Errorf("OIDC_ROLE_CLAIM is empty")
 	}
 	m := &RoleMapper{Path: path}
 
@@ -39,16 +39,16 @@ func NewRoleMapper(claimPath, rawMap string) (*RoleMapper, error) {
 		}
 		claimValue, roleName, ok := strings.Cut(pair, ":")
 		if !ok {
-			return nil, fmt.Errorf("OIDC_ROLE_MAP: %q ist kein Paar der Form claim-wert:rolle", pair)
+			return nil, fmt.Errorf("OIDC_ROLE_MAP: %q is not a claim-value:role pair", pair)
 		}
 		role := ParseRole(roleName)
 		if !role.Valid() {
-			return nil, fmt.Errorf("OIDC_ROLE_MAP: %q ist keine gültige Rolle (viewer, editor, admin)", roleName)
+			return nil, fmt.Errorf("OIDC_ROLE_MAP: %q is not a valid role (viewer, editor, admin)", roleName)
 		}
 		m.Map[strings.TrimSpace(claimValue)] = role
 	}
 	if len(m.Map) == 0 {
-		return nil, fmt.Errorf("OIDC_ROLE_MAP enthält keine verwertbaren Paare")
+		return nil, fmt.Errorf("OIDC_ROLE_MAP contains no usable pairs")
 	}
 	return m, nil
 }

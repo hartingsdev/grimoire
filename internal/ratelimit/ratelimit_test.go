@@ -6,27 +6,27 @@ import (
 )
 
 func TestLimiterBlocksAndRefills(t *testing.T) {
-	l := New(60) // eine Anfrage pro Sekunde, Eimer fasst 60
+	l := New(60) // one request per second, bucket holds 60
 	now := time.Now()
 
 	for i := 0; i < 60; i++ {
 		if res := l.Allow("k1", now); !res.Allowed {
-			t.Fatalf("Anfrage %d wurde bereits abgewiesen", i+1)
+			t.Fatalf("request %d was already refused", i+1)
 		}
 	}
 	res := l.Allow("k1", now)
 	if res.Allowed {
-		t.Error("61. Anfrage in derselben Sekunde wurde durchgelassen")
+		t.Error("the 61st request in the same second was let through")
 	}
 	if res.RetryAfter <= 0 {
-		t.Error("RetryAfter fehlt für eine abgewiesene Anfrage")
+		t.Error("RetryAfter missing on a refused request")
 	}
 	if res := l.Allow("k1", now.Add(2*time.Second)); !res.Allowed {
-		t.Error("Eimer füllt sich nicht wieder auf")
+		t.Error("the bucket does not refill")
 	}
 	// Keys do not interfere with each other.
 	if res := l.Allow("k2", now); !res.Allowed {
-		t.Error("ein anderer Key wurde vom ersten mitbegrenzt")
+		t.Error("another key was throttled by the first")
 	}
 }
 
@@ -37,9 +37,9 @@ func TestLimiterCleanup(t *testing.T) {
 	l.Allow("neu", now.Add(time.Hour))
 	l.Cleanup(now.Add(time.Hour), 30*time.Minute)
 	if _, ok := l.buckets["alt"]; ok {
-		t.Error("alter Eimer wurde nicht aufgeräumt")
+		t.Error("the stale bucket was not cleaned up")
 	}
 	if _, ok := l.buckets["neu"]; !ok {
-		t.Error("frischer Eimer wurde entfernt")
+		t.Error("a fresh bucket was removed")
 	}
 }

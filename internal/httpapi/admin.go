@@ -65,8 +65,8 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
 		"users": out,
-		"hinweis": "Rollen stammen aus dem Anmeldedienst und werden hier nur " +
-			"zwischengespeichert. Zugang entziehen geschieht im IdP, nicht hier.",
+		"note": "Roles come from the identity provider and are only cached here. " +
+			"Access is withdrawn at the IdP, not in this app.",
 	})
 }
 
@@ -91,8 +91,8 @@ func (s *Server) handleUserFootprint(w http.ResponseWriter, r *http.Request) {
 			"activeKeys": fp.ActiveKeys, "sessions": fp.Sessions,
 		},
 		"transferAllowed": s.cfg.AdminPrivateAccess != config.AdminPrivateNone,
-		"warnung": "Das Löschen entzieht NICHT den Zugang. Entferne die Person zuerst " +
-			"im Anmeldedienst, sonst legt der nächste Login ein neues, leeres Konto an.",
+		"warning": "Deleting does NOT withdraw access. Remove the person at the identity " +
+			"provider first, or their next sign-in creates a fresh, empty account.",
 	})
 }
 
@@ -107,7 +107,7 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	if id == p.UserID {
 		writeError(w, http.StatusBadRequest, "self_delete",
-			"Du kannst dein eigenes Konto hier nicht löschen.")
+			"You cannot delete your own account here.")
 		return
 	}
 	var in struct {
@@ -122,14 +122,14 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	if in.PrivatePrompts == "transfer" {
 		if s.cfg.AdminPrivateAccess == config.AdminPrivateNone {
 			writeError(w, http.StatusForbidden, "private_access_disabled",
-				"Diese Instanz steht auf ADMIN_PRIVATE_ACCESS=none; private Einträge "+
-					"können nicht übernommen werden.")
+				"This instance runs with ADMIN_PRIVATE_ACCESS=none; private prompts "+
+					"cannot be taken over.")
 			return
 		}
 		if strings.TrimSpace(in.Reason) == "" {
 			writeError(w, http.StatusBadRequest, "reason_required",
-				"Für die Übernahme privater Einträge ist eine Begründung erforderlich. "+
-					"Sie wird protokolliert und ist für alle Administratoren sichtbar.")
+				"Taking over private prompts requires a reason. It is recorded in the "+
+					"audit log and visible to the owner.")
 			return
 		}
 		opts.TransferPrivateTo = p.UserID
@@ -142,10 +142,10 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	detail, _ := json.Marshal(map[string]any{
-		"privatePrompts": map[bool]string{true: "übernommen", false: "gelöscht"}[opts.TransferPrivateTo != ""],
-		"anzahlPrivat":   fp.PrivatePrompts,
-		"anzahlGeteilt":  fp.SharedPrompts,
-		"anzahlKeys":     fp.ActiveKeys,
+		"privatePrompts": map[bool]string{true: "transferred", false: "deleted"}[opts.TransferPrivateTo != ""],
+		"privateCount":   fp.PrivatePrompts,
+		"sharedCount":    fp.SharedPrompts,
+		"keyCount":       fp.ActiveKeys,
 	})
 	s.audit(r, store.AuditEntry{
 		Action: store.ActionUserDeleted, TargetType: "user", TargetID: id,
@@ -169,8 +169,8 @@ func (s *Server) handleRevealPrivate(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
 	if s.cfg.AdminPrivateAccess == config.AdminPrivateNone {
 		writeError(w, http.StatusForbidden, "private_access_disabled",
-			"Diese Instanz steht auf ADMIN_PRIVATE_ACCESS=none. Private Einträge "+
-				"anderer sind hier für niemanden einsehbar.")
+			"This instance runs with ADMIN_PRIVATE_ACCESS=none. Other people's "+
+				"private prompts are visible to nobody here.")
 		return
 	}
 	var in struct {
@@ -181,8 +181,8 @@ func (s *Server) handleRevealPrivate(w http.ResponseWriter, r *http.Request) {
 	}
 	if strings.TrimSpace(in.Reason) == "" {
 		writeError(w, http.StatusBadRequest, "reason_required",
-			"Eine Begründung ist erforderlich. Sie wird protokolliert und ist für "+
-				"den Besitzer des Eintrags sichtbar.")
+			"A reason is required. It is recorded in the audit log and shown to "+
+				"the owner of the prompt.")
 		return
 	}
 
@@ -204,8 +204,8 @@ func (s *Server) handleRevealPrivate(w http.ResponseWriter, r *http.Request) {
 		Action: store.ActionPrivateRevealed, TargetType: "prompt", TargetID: id,
 		Reason: in.Reason, DetailJSON: string(detail),
 	})
-	s.log.Warn("privater Eintrag freigeschaltet",
-		"admin", p.UserID, "eintrag", id, "besitzer", prompt.OwnerID, "begruendung", in.Reason)
+	s.log.Warn("private prompt revealed",
+		"admin", p.UserID, "prompt", id, "owner", prompt.OwnerID, "reason", in.Reason)
 	writeJSON(w, http.StatusOK, toPromptJSON(prompt))
 }
 

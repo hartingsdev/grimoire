@@ -26,11 +26,11 @@ type Identity struct {
 
 // ErrProviderUnavailable means the IdP did not answer. This is explicitly NOT
 // an authoritative "no access" — the caller must not revoke anything over it.
-var ErrProviderUnavailable = errors.New("OIDC-Provider nicht erreichbar")
+var ErrProviderUnavailable = errors.New("OIDC provider unreachable")
 
 // ErrSessionEndedAtProvider means the provider ended the session or rejected
 // the refresh token. This is authoritative.
-var ErrSessionEndedAtProvider = errors.New("Sitzung beim Provider beendet")
+var ErrSessionEndedAtProvider = errors.New("session ended at the provider")
 
 type OIDCClient struct {
 	provider      *oidc.Provider
@@ -62,7 +62,7 @@ func NewProvider(cfg config.OIDC, log *slog.Logger) (*Provider, error) {
 		return nil, err
 	}
 	return &Provider{cfg: cfg, log: log, mapper: mapper,
-		err: fmt.Errorf("%w: Discovery läuft noch", ErrProviderUnavailable)}, nil
+		err: fmt.Errorf("%w: discovery still running", ErrProviderUnavailable)}, nil
 }
 
 // Discover loads the provider configuration, retrying until it succeeds or
@@ -75,11 +75,11 @@ func (p *Provider) Discover(ctx context.Context) {
 		p.client, p.err = client, err
 		p.mu.Unlock()
 		if err == nil {
-			p.log.Info("OIDC-Provider erreicht", "issuer", p.cfg.Issuer)
+			p.log.Info("OIDC provider reached", "issuer", p.cfg.Issuer)
 			return
 		}
-		p.log.Warn("OIDC-Discovery fehlgeschlagen, neuer Versuch",
-			"issuer", p.cfg.Issuer, "fehler", err, "in", delay)
+		p.log.Warn("OIDC discovery failed, retrying",
+			"issuer", p.cfg.Issuer, "error", err, "retry_in", delay)
 		select {
 		case <-ctx.Done():
 			return
@@ -145,18 +145,18 @@ func NewVerifier() string { return oauth2.GenerateVerifier() }
 func (c *OIDCClient) Exchange(ctx context.Context, code, verifier, nonce string) (Identity, *oauth2.Token, error) {
 	token, err := c.oauth.Exchange(ctx, code, oauth2.VerifierOption(verifier))
 	if err != nil {
-		return Identity{}, nil, fmt.Errorf("Code-Einlösung fehlgeschlagen: %w", err)
+		return Identity{}, nil, fmt.Errorf("code exchange failed: %w", err)
 	}
 	rawID, ok := token.Extra("id_token").(string)
 	if !ok || rawID == "" {
-		return Identity{}, nil, errors.New("der Provider hat kein id_token geliefert")
+		return Identity{}, nil, errors.New("the provider returned no id_token")
 	}
 	idToken, err := c.verifier.Verify(ctx, rawID)
 	if err != nil {
-		return Identity{}, nil, fmt.Errorf("ID-Token nicht gültig: %w", err)
+		return Identity{}, nil, fmt.Errorf("ID token is not valid: %w", err)
 	}
 	if idToken.Nonce != nonce {
-		return Identity{}, nil, errors.New("Nonce des ID-Tokens passt nicht zum Login-Vorgang")
+		return Identity{}, nil, errors.New("ID token nonce does not match this login")
 	}
 	claims := map[string]any{}
 	if err := idToken.Claims(&claims); err != nil {
@@ -195,7 +195,7 @@ func (c *OIDCClient) Revalidate(ctx context.Context, tok *oauth2.Token) (Identit
 	}
 	claims := map[string]any{}
 	if err := info.Claims(&claims); err != nil {
-		return Identity{}, nil, fmt.Errorf("%w: userinfo unlesbar: %v", ErrProviderUnavailable, err)
+		return Identity{}, nil, fmt.Errorf("%w: userinfo unreadable: %v", ErrProviderUnavailable, err)
 	}
 	identity := c.identityFromClaims(claims)
 	if identity.Subject == "" {
@@ -218,7 +218,7 @@ func (c *OIDCClient) identityFrom(ctx context.Context, idClaims map[string]any, 
 		info, err := c.provider.UserInfo(ctx, oauth2.StaticTokenSource(token))
 		if err != nil {
 			if c.claimsSource == config.ClaimsUserinfo {
-				return Identity{}, fmt.Errorf("userinfo nicht abrufbar: %w", err)
+				return Identity{}, fmt.Errorf("userinfo not retrievable: %w", err)
 			}
 			// Under "both", userinfo is a supplement, not a requirement.
 		} else {

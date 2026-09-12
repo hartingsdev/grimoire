@@ -6,28 +6,28 @@
 #   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d
 
 services:
-  promptory-privat:
+  grimoire-personal:
     build: .
-    image: promptory:latest
-    container_name: promptory-privat
+    image: grimoire:latest
+    container_name: grimoire-personal
     restart: unless-stopped
-    env_file: .env.privat
+    env_file: .env.personal
     volumes:
-      - privat-data:/data
+      - personal-data:/data
     ports:
       - "127.0.0.1:8081:8080"
 
-  promptory-arbeit:
+  grimoire-work:
     build: .
-    image: promptory:latest
-    container_name: promptory-arbeit
+    image: grimoire:latest
+    container_name: grimoire-work
     restart: unless-stopped
-    env_file: .env.arbeit
+    env_file: .env.work
     volumes:
-      - arbeit-data:/data
+      - work-data:/data
     ports:
       - "127.0.0.1:8082:8080"
 
 volumes:
-  privat-data:
-  arbeit-data:
+  personal-data:
+  work-data:

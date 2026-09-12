@@ -145,7 +145,7 @@ func EffectiveKeyRole(k APIKey, ownerRole auth.Role, ownerRoleAt time.Time,
 		return auth.RoleNone
 	}
 	if k.OwnerID == "" {
-		return k.Role // Service-Key ohne Besitzer: noch nicht erzeugbar, aber vorgesehen
+		return k.Role // service key without an owner: not issuable yet, but provided for
 	}
 	if auth.OwnerStale(ownerRoleAt, staleAfter, now) {
 		return auth.RoleNone
@@ -166,7 +166,7 @@ func (s *Store) RevokeAPIKey(ctx context.Context, id, ownerID, reason string, no
 		return err
 	}
 	if n, _ := res.RowsAffected(); n == 0 {
-		return fmt.Errorf("Key %s: %w", id, ErrNotFound)
+		return fmt.Errorf("key %s: %w", id, ErrNotFound)
 	}
 	return nil
 }

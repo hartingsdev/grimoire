@@ -9,7 +9,7 @@ RUN go mod download
 COPY . .
 # CGO_ENABLED=0 is why modernc.org/sqlite was chosen: it yields a statically
 # linked binary with no libc dependency.
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/promptory ./cmd/server
+RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /out/grimoire ./cmd/server
 
 # Prepare the directory with the right ownership; Docker carries it over when
 # creating the volume. Otherwise /data would belong to root and the nonroot
@@ -20,7 +20,7 @@ RUN mkdir -p /out/data && chown 65532:65532 /out/data
 # distroless/static ships the CA certificates needed for HTTPS to the IdP.
 FROM gcr.io/distroless/static-debian12:nonroot
 
-COPY --from=build /out/promptory /promptory
+COPY --from=build /out/grimoire /grimoire
 COPY --from=build --chown=nonroot:nonroot /out/data /data
 
 USER nonroot:nonroot
@@ -30,6 +30,6 @@ VOLUME ["/data"]
 
 # The runtime image has no curl; the binary carries its own check.
 HEALTHCHECK --interval=30s --timeout=5s --start-period=5s --retries=3 \
-    CMD ["/promptory", "-healthcheck"]
+    CMD ["/grimoire", "-healthcheck"]
 
-ENTRYPOINT ["/promptory"]
+ENTRYPOINT ["/grimoire"]

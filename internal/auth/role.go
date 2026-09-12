@@ -35,13 +35,13 @@ func (r Role) Valid() bool { return r.Rank() > 0 }
 func (r Role) Label() string {
 	switch r {
 	case RoleViewer:
-		return "Betrachter"
+		return "Viewer"
 	case RoleEditor:
-		return "Bearbeiter"
+		return "Editor"
 	case RoleAdmin:
 		return "Administrator"
 	default:
-		return "kein Zugriff"
+		return "no access"
 	}
 }
 

@@ -30,7 +30,7 @@ const (
 // No l, o, 0 or 1, so ids stay unambiguous when read aloud or typed.
 const keyIDAlphabet = "abcdefghijkmnpqrstuvwxyz23456789"
 
-var ErrMalformedKey = errors.New("API-Key hat ein unbekanntes Format")
+var ErrMalformedKey = errors.New("API key has an unknown format")
 
 // NewKey mints a key for the given instance. The plaintext is returned once
 // and stored nowhere.

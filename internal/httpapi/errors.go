@@ -27,7 +27,7 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 		return
 	}
 	if err := json.NewEncoder(w).Encode(body); err != nil {
-		slog.Default().Error("Antwort konnte nicht geschrieben werden", "fehler", err)
+		slog.Default().Error("could not write response", "error", err)
 	}
 }
 
@@ -41,12 +41,12 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 func (s *Server) writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):
-		writeError(w, http.StatusNotFound, "not_found", "Nicht gefunden.")
+		writeError(w, http.StatusNotFound, "not_found", "Not found.")
 	default:
-		s.log.Error("Anfrage fehlgeschlagen",
-			"pfad", r.URL.Path, "methode", r.Method, "fehler", err)
+		s.log.Error("request failed",
+			"path", r.URL.Path, "method", r.Method, "error", err)
 		writeError(w, http.StatusInternalServerError, "internal",
-			"Unerwarteter Fehler. Details stehen im Server-Log.")
+			"Unexpected error. Details are in the server log.")
 	}
 }
 
@@ -56,7 +56,7 @@ func decodeJSON(w http.ResponseWriter, r *http.Request, dst any) bool {
 	dec.DisallowUnknownFields()
 	if err := dec.Decode(dst); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_request",
-			"Anfrage konnte nicht gelesen werden: "+err.Error())
+			"Could not read the request: "+err.Error())
 		return false
 	}
 	return true

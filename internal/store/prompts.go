@@ -18,7 +18,7 @@ import (
 // person's library, with no special rule for keys.
 type Scope struct {
 	ViewerID      string
-	SeeAllPrivate bool // nur für Admins, wenn ADMIN_PRIVATE_ACCESS=full
+	SeeAllPrivate bool // admins only, and only under ADMIN_PRIVATE_ACCESS=full
 }
 
 func (s Scope) clause(alias string) (string, []any) {
@@ -138,7 +138,7 @@ func (s *Store) ListPrompts(ctx context.Context, sc Scope, opts ListOptions) ([]
 
 	rows, err := s.db.QueryContext(ctx, sb.String(), args...)
 	if err != nil {
-		return nil, fmt.Errorf("Prompts suchen: %w", err)
+		return nil, fmt.Errorf("search prompts: %w", err)
 	}
 	defer rows.Close()
 
@@ -348,7 +348,7 @@ func (s *Store) RestorePrompt(ctx context.Context, sc Scope, id string, revision
 				  WHERE prompt_id = ? AND revision = ?`, id, revision).
 				Scan(&current.Title, &current.Body, &current.Visibility, &tagsJSON)
 			if errors.Is(err, sql.ErrNoRows) {
-				return fmt.Errorf("Revision %d: %w", revision, ErrNotFound)
+				return fmt.Errorf("revision %d: %w", revision, ErrNotFound)
 			}
 			if err != nil {
 				return err

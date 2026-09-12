@@ -21,7 +21,7 @@ var migrationFS embed.FS
 
 type Store struct {
 	db   *sql.DB
-	aead cipher.AEAD // verschlüsselt die in sessions abgelegten Provider-Tokens
+	aead cipher.AEAD // encrypts the provider tokens kept in sessions
 }
 
 // Open opens the database file and brings the schema up to date.
@@ -34,14 +34,14 @@ func Open(path string, encryptionKey []byte) (*Store, error) {
 		"&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)", url.PathEscape(path))
 	db, err := sql.Open("sqlite", dsn)
 	if err != nil {
-		return nil, fmt.Errorf("Datenbank %s öffnen: %w", path, err)
+		return nil, fmt.Errorf("open database %s: %w", path, err)
 	}
 	db.SetMaxOpenConns(1)
 	db.SetConnMaxLifetime(0)
 
 	if err := db.Ping(); err != nil {
 		db.Close()
-		return nil, fmt.Errorf("Datenbank %s erreichen: %w", path, err)
+		return nil, fmt.Errorf("reach database %s: %w", path, err)
 	}
 	aead, err := newAEAD(encryptionKey)
 	if err != nil {
@@ -75,7 +75,7 @@ func (s *Store) migrate() error {
 
 	var version int
 	if err := s.db.QueryRow("PRAGMA user_version").Scan(&version); err != nil {
-		return fmt.Errorf("Schemaversion lesen: %w", err)
+		return fmt.Errorf("read schema version: %w", err)
 	}
 	for i, name := range names {
 		step := i + 1
@@ -92,15 +92,15 @@ func (s *Store) migrate() error {
 		}
 		if _, err := tx.Exec(string(body)); err != nil {
 			tx.Rollback()
-			return fmt.Errorf("Migration %s: %w", name, err)
+			return fmt.Errorf("migration %s: %w", name, err)
 		}
 		// PRAGMA user_version does not accept placeholders.
 		if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", step)); err != nil {
 			tx.Rollback()
-			return fmt.Errorf("Migration %s, Version setzen: %w", name, err)
+			return fmt.Errorf("migration %s, setting version: %w", name, err)
 		}
 		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("Migration %s abschließen: %w", name, err)
+			return fmt.Errorf("migration %s, commit: %w", name, err)
 		}
 	}
 	return nil

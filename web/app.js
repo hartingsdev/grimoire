@@ -1,4 +1,4 @@
-// Promptory UI. No framework, no build step.
+// Grimoire UI. No framework, no build step.
 //
 // It only offers what the server would allow anyway: /api/v1/me reports role
 // and capabilities, and the buttons follow. Enforcement happens in the server;
@@ -23,7 +23,7 @@ async function api(method, path, body) {
   const text = await res.text();
   const data = text ? JSON.parse(text) : null;
   if (!res.ok) {
-    const err = new Error((data && data.error && data.error.message) || `Fehler ${res.status}`);
+    const err = new Error((data && data.error && data.error.message) || `Error ${res.status}`);
     err.code = data && data.error && data.error.code;
     err.status = res.status;
     throw err;
@@ -67,24 +67,24 @@ function formatDate(value) {
   if (!value) return '–';
   const d = new Date(value);
   if (Number.isNaN(d.getTime()) || d.getFullYear() < 2000) return '–';
-  return d.toLocaleDateString('de-DE', { day: '2-digit', month: '2-digit', year: 'numeric' });
+  return d.toLocaleDateString('en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
 }
 
 function relative(value) {
-  if (!value) return 'nie';
+  if (!value) return 'never';
   const d = new Date(value);
-  if (Number.isNaN(d.getTime()) || d.getFullYear() < 2000) return 'nie';
+  if (Number.isNaN(d.getTime()) || d.getFullYear() < 2000) return 'never';
   const minutes = Math.round((Date.now() - d.getTime()) / 60000);
-  if (minutes < 2) return 'gerade eben';
-  if (minutes < 60) return `vor ${minutes} Min.`;
-  if (minutes < 1440) return `vor ${Math.round(minutes / 60)} Std.`;
+  if (minutes < 2) return 'just now';
+  if (minutes < 60) return `${minutes} min ago`;
+  if (minutes < 1440) return `${Math.round(minutes / 60)} h ago`;
   return formatDate(value);
 }
 
 async function copyText(text) {
   try {
     await navigator.clipboard.writeText(text);
-    toast('Kopiert.');
+    toast('Copied.');
   } catch {
     // No clipboard API without a secure context (plain http).
     const area = el('textarea', { style: 'position:fixed;opacity:0' });
@@ -93,7 +93,7 @@ async function copyText(text) {
     area.select();
     document.execCommand('copy');
     area.remove();
-    toast('Kopiert.');
+    toast('Copied.');
   }
 }
 
@@ -134,10 +134,10 @@ function renderPrompts(prompts) {
   if (prompts.length === 0) {
     empty.hidden = false;
     empty.textContent = state.q || state.tags.size || state.visibility
-      ? 'Nichts gefunden.'
+      ? 'Nothing found.'
       : can('prompts:write')
-        ? 'Noch keine Einträge. Leg den ersten an.'
-        : 'Noch keine Einträge.';
+        ? 'No prompts yet. Create the first one.'
+        : 'No prompts yet.';
   } else {
     empty.hidden = true;
   }
@@ -145,27 +145,27 @@ function renderPrompts(prompts) {
 
 function promptCard(p) {
   const actions = [
-    el('button', { onclick: () => copyText(p.body) }, 'Kopieren'),
+    el('button', { onclick: () => copyText(p.body) }, 'Copy'),
   ];
   if (can('prompts:write')) {
-    actions.push(el('button', { onclick: () => openPromptDialog(p) }, 'Bearbeiten'));
+    actions.push(el('button', { onclick: () => openPromptDialog(p) }, 'Edit'));
     actions.push(el('button', {
       class: 'ghost',
       onclick: async () => {
-        if (!confirm(`„${p.title}“ löschen? Der Eintrag bleibt über die Versionshistorie wiederherstellbar.`)) return;
+        if (!confirm(`Delete "${p.title}"? It stays restorable through the revision history.`)) return;
         try {
           await api('DELETE', `/api/v1/prompts/${p.id}`);
-          toast('Gelöscht.');
+          toast('Deleted.');
           await loadLibrary();
         } catch (err) { showError(err); }
       },
-    }, 'Löschen'));
+    }, 'Delete'));
   }
 
   return el('article', { class: 'card' },
     el('header', {},
       el('h3', { text: p.title }),
-      p.visibility === 'private' ? el('span', { class: 'badge', text: 'privat' }) : null,
+      p.visibility === 'private' ? el('span', { class: 'badge', text: 'private' }) : null,
       el('span', { class: 'meta', text: `${p.owner.name} · ${formatDate(p.updatedAt)} · v${p.revision}` })),
     p.tags.length ? el('div', { class: 'meta', text: p.tags.join(' · ') }) : null,
     el('pre', { text: p.body }),
@@ -178,7 +178,7 @@ let editing = null;
 
 function openPromptDialog(prompt) {
   editing = prompt || null;
-  $('promptDialogTitle').textContent = prompt ? 'Eintrag bearbeiten' : 'Neuer Eintrag';
+  $('promptDialogTitle').textContent = prompt ? 'Edit prompt' : 'New prompt';
   $('pTitle').value = prompt ? prompt.title : '';
   $('pBody').value = prompt ? prompt.body : '';
   $('pTags').value = prompt ? prompt.tags.join(', ') : '';
@@ -189,7 +189,7 @@ function openPromptDialog(prompt) {
   const wrap = $('pPrivateWrap');
   wrap.hidden = !me.instance.privatePrompts;
   $('pPrivateNote').textContent = me.instance.privateVisibleToAdmins
-    ? '– Administratoren dieser Instanz können private Einträge einsehen.'
+    ? '— administrators of this instance can read private prompts.'
     : '';
   $('promptDialog').showModal();
 }
@@ -203,7 +203,7 @@ async function savePrompt() {
   };
   if (editing) await api('PATCH', `/api/v1/prompts/${editing.id}`, payload);
   else await api('POST', '/api/v1/prompts', payload);
-  toast(editing ? 'Gespeichert.' : 'Angelegt.');
+  toast(editing ? 'Saved.' : 'Created.');
   await loadLibrary();
 }
 
@@ -214,35 +214,35 @@ async function loadKeys() {
   const { keys } = await api('GET', '/api/v1/api-keys' + all);
   const list = $('keyList');
   if (keys.length === 0) {
-    list.replaceChildren(el('p', { class: 'empty', text: 'Noch keine Keys.' }));
+    list.replaceChildren(el('p', { class: 'empty', text: 'No keys yet.' }));
     return;
   }
   list.replaceChildren(...keys.map(keyCard));
 }
 
 function keyCard(k) {
-  const roleLabel = k.role === 'editor' ? 'lesen und schreiben' : 'nur lesen';
+  const roleLabel = k.role === 'editor' ? 'read and write' : 'read only';
   const actions = [];
   if (!k.revokedAt) {
     actions.push(el('button', {
       class: 'ghost',
       onclick: async () => {
-        if (!confirm(`Key „${k.name}“ widerrufen? Das ist endgültig.`)) return;
+        if (!confirm(`Revoke the key "${k.name}"? This is permanent.`)) return;
         try {
           await api('DELETE', `/api/v1/api-keys/${k.id}`);
-          toast('Widerrufen.');
+          toast('Revoked.');
           await loadKeys();
         } catch (err) { showError(err); }
       },
-    }, 'Widerrufen'));
+    }, 'Revoke'));
   }
   return el('article', { class: 'card' },
     el('header', {},
       el('h3', { text: k.name }),
       el('span', { class: 'badge', text: roleLabel })),
     el('div', { class: 'meta' },
-      `${k.id} · ${k.owner.name} · erstellt ${formatDate(k.createdAt)} · ` +
-      `zuletzt genutzt ${relative(k.lastUsedAt)} · läuft ab ${formatDate(k.expiresAt)}`),
+      `${k.id} · ${k.owner.name} · created ${formatDate(k.createdAt)} · ` +
+      `last used ${relative(k.lastUsedAt)} · expires ${formatDate(k.expiresAt)}`),
     k.statusNote ? el('div', { class: k.status === 'active' ? 'meta' : 'warn', text: k.statusNote }) : null,
     actions.length ? el('div', { class: 'actions' }, actions) : null);
 }
@@ -269,17 +269,17 @@ async function loadAdmin() {
   $('userList').replaceChildren(...users.map((u) => el('article', { class: 'card' },
     el('header', {},
       el('h3', { text: u.name }),
-      el('span', { class: 'badge', text: u.lastSeenRole || 'kein Zugriff' })),
-    el('div', { class: 'meta', text: `${u.email || '–'} · zuletzt angemeldet ${relative(u.lastLoginAt)}` }),
+      el('span', { class: 'badge', text: u.lastSeenRole || 'no access' })),
+    el('div', { class: 'meta', text: `${u.email || '–'} · last signed in ${relative(u.lastLoginAt)}` }),
     u.id === me.user.id ? null : el('div', { class: 'actions' },
-      el('button', { class: 'ghost', onclick: () => openDeleteUser(u) }, 'Entfernen')))));
+      el('button', { class: 'ghost', onclick: () => openDeleteUser(u) }, 'Remove')))));
 
   $('auditList').replaceChildren(...(entries.length
     ? entries.map((e) => el('article', { class: 'card' },
         el('div', {}, el('strong', { text: e.action }),
-          ' · ', e.actor.name || 'System', ' · ', formatDate(e.at)),
-        e.reason ? el('div', { class: 'meta', text: 'Begründung: ' + e.reason }) : null))
-    : [el('p', { class: 'empty', text: 'Noch keine Einträge.' })]));
+          ' · ', e.actor.name || 'system', ' · ', formatDate(e.at)),
+        e.reason ? el('div', { class: 'meta', text: 'Reason: ' + e.reason }) : null))
+    : [el('p', { class: 'empty', text: 'Nothing recorded yet.' })]));
 }
 
 let deletingUser = null;
@@ -289,18 +289,18 @@ async function openDeleteUser(user) {
   const info = await api('GET', `/api/v1/admin/users/${user.id}/footprint`);
   const f = info.footprint;
   $('duSummary').textContent =
-    `${user.name}: ${f.sharedPrompts} geteilte Einträge (bleiben erhalten), ` +
-    `${f.privatePrompts} private, ${f.activeKeys} aktive Keys, ${f.sessions} Sitzungen.`;
+    `${user.name}: ${f.sharedPrompts} shared prompts (these stay), ` +
+    `${f.privatePrompts} private, ${f.activeKeys} active keys, ${f.sessions} sessions.`;
 
   const choice = el('div', {});
   if (f.privatePrompts > 0 && info.transferAllowed) {
     choice.append(
       el('label', { class: 'checkbox' },
         el('input', { type: 'radio', name: 'priv', value: 'delete', checked: true }),
-        ' Private Einträge löschen'),
+        ' Delete private prompts'),
       el('label', { class: 'checkbox' },
         el('input', { type: 'radio', name: 'priv', value: 'transfer' }),
-        ' Private Einträge übernehmen (verschafft dir Lesezugriff, wird protokolliert)'));
+        ' Take over private prompts (grants you read access, recorded in the audit log)'));
   }
   $('duPrivate').replaceChildren(choice);
   $('duReasonWrap').hidden = true;
@@ -322,7 +322,7 @@ async function deleteUser() {
     privatePrompts: selectedPrivateChoice(),
     reason: $('duReason').value.trim(),
   });
-  toast('Nutzer entfernt.');
+  toast('User removed.');
   await loadAdmin();
 }
 
@@ -343,7 +343,7 @@ async function showView(name) {
 
 function showError(err) {
   if (err && err.status === 401) { location.href = '/auth/login'; return; }
-  toast(err && err.message ? err.message : 'Unerwarteter Fehler.');
+  toast(err && err.message ? err.message : 'Unexpected error.');
 }
 
 // --- startup ----------------------------------------------------------------
@@ -413,7 +413,7 @@ async function start() {
     me = await api('GET', '/api/v1/me');
   } catch (err) {
     if (err.status === 401) { location.href = '/auth/login'; return; }
-    $('boot').textContent = 'Die Anwendung ist gerade nicht erreichbar: ' + err.message;
+    $('boot').textContent = 'The application is not reachable right now: ' + err.message;
     return;
   }
 

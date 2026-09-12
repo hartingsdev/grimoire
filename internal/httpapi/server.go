@@ -129,14 +129,14 @@ func (s *Server) verifyRoutes() error {
 	for _, r := range s.routes {
 		key := r.Method + " " + r.Pattern
 		if seen[key] {
-			return fmt.Errorf("Route %s ist doppelt registriert", key)
+			return fmt.Errorf("route %s is registered twice", key)
 		}
 		seen[key] = true
 		if r.Access == AccessCapability && r.Cap == "" {
-			return fmt.Errorf("Route %s verlangt eine Fähigkeit, nennt aber keine", key)
+			return fmt.Errorf("route %s requires a capability but names none", key)
 		}
 		if r.Access != AccessCapability && r.Cap != "" {
-			return fmt.Errorf("Route %s nennt die Fähigkeit %q, prüft sie aber nicht", key, r.Cap)
+			return fmt.Errorf("route %s names capability %q but never checks it", key, r.Cap)
 		}
 	}
 	return nil
@@ -150,7 +150,7 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 // out of the database, idle rate-limit buckets out of memory.
 func (s *Server) Background(ctx context.Context, now time.Time) {
 	if err := s.store.Cleanup(ctx); err != nil {
-		s.log.Warn("Aufräumen fehlgeschlagen", "fehler", err)
+		s.log.Warn("cleanup failed", "error", err)
 	}
 	s.limiter.Cleanup(now, time.Hour)
 }
@@ -164,7 +164,7 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	if !s.provider.Ready() {
 		writeError(w, http.StatusServiceUnavailable, "provider_unavailable",
-			"OIDC-Provider noch nicht erreichbar.")
+			"OIDC provider not reachable yet.")
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ready"})

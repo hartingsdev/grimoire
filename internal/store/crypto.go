@@ -13,7 +13,7 @@ import (
 // file does not hand over working tokens.
 func newAEAD(key []byte) (cipher.AEAD, error) {
 	if len(key) != 32 {
-		return nil, fmt.Errorf("DATA_ENCRYPTION_KEY muss 32 Byte lang sein, ist %d", len(key))
+		return nil, fmt.Errorf("DATA_ENCRYPTION_KEY must be 32 bytes, got %d", len(key))
 	}
 	block, err := aes.NewCipher(key)
 	if err != nil {
@@ -39,13 +39,13 @@ func (s *Store) open(ciphertext []byte) (string, error) {
 	}
 	n := s.aead.NonceSize()
 	if len(ciphertext) < n {
-		return "", errors.New("verschlüsselter Wert ist zu kurz")
+		return "", errors.New("encrypted value is too short")
 	}
 	plaintext, err := s.aead.Open(nil, ciphertext[:n], ciphertext[n:], nil)
 	if err != nil {
 		// Almost always a rotated DATA_ENCRYPTION_KEY. The session can then no
 		// longer be revalidated and is discarded.
-		return "", fmt.Errorf("Wert nicht entschlüsselbar (DATA_ENCRYPTION_KEY gewechselt?): %w", err)
+		return "", fmt.Errorf("value will not decrypt (DATA_ENCRYPTION_KEY rotated?): %w", err)
 	}
 	return string(plaintext), nil
 }
