@@ -52,7 +52,7 @@ func TestSchemaAndPromptLifecycle(t *testing.T) {
 		t.Errorf("erste Revision = %d, erwartet 1", p.Revision)
 	}
 
-	// FTS5 findet Wortanfänge und normalisiert Diakritika.
+	// FTS5 matches word prefixes and folds diacritics.
 	for _, q := range []string{"zusammenfass", "Übersetz", "praez", "fasse"} {
 		got, err := s.ListPrompts(ctx, scope, ListOptions{Query: q})
 		if err != nil {
@@ -63,7 +63,7 @@ func TestSchemaAndPromptLifecycle(t *testing.T) {
 			t.Errorf("Suche %q: %d Treffer, erwartet Treffer=%v", q, len(got), want)
 		}
 	}
-	// LIKE fängt die Teilwortsuche mitten im Wort ab, die FTS5 nicht kann.
+	// LIKE covers mid-word substrings that FTS5 cannot.
 	if got, _ := s.ListPrompts(ctx, scope, ListOptions{Query: "fassung"}); len(got) != 1 {
 		t.Errorf("Teilwortsuche 'fassung': %d Treffer, erwartet 1", len(got))
 	}
@@ -103,8 +103,8 @@ func TestSchemaAndPromptLifecycle(t *testing.T) {
 	}
 }
 
-// Private Prompts sind für andere unsichtbar — und ein API-Key sieht genau das,
-// was sein Besitzer sieht, weil er dessen ViewerID trägt.
+// Private prompts are invisible to others, and an API key sees exactly what its
+// owner sees because it carries their ViewerID.
 func TestPrivateVisibility(t *testing.T) {
 	s, ctx := testStore(t)
 	now := time.Now()
@@ -135,14 +135,14 @@ func TestPrivateVisibility(t *testing.T) {
 	if _, err := s.GetPrompt(ctx, Scope{ViewerID: bernd.ID, SeeAllPrivate: true}, priv.ID); err != nil {
 		t.Errorf("Admin mit ADMIN_PRIVATE_ACCESS=full kam nicht an den Eintrag: %v", err)
 	}
-	// Auch die Tag-Liste darf nichts über fremde private Einträge verraten.
+	// The tag list must not leak other people's private prompts either.
 	if _, err := s.ListTags(ctx, Scope{ViewerID: bernd.ID}); err != nil {
 		t.Fatal(err)
 	}
 }
 
-// Beim Löschen eines Nutzers bleiben geteilte Prompts und die Historie erhalten;
-// die Nutzerzeile wird zum Grabstein.
+// Deleting a user keeps shared prompts and history; the user row becomes a
+// tombstone.
 func TestDeleteUserKeepsSharedContentAndHistory(t *testing.T) {
 	s, ctx := testStore(t)
 	now := time.Now()
@@ -185,7 +185,7 @@ func TestDeleteUserKeepsSharedContentAndHistory(t *testing.T) {
 	if len(keys) != 0 {
 		t.Errorf("%d Keys überlebten die Löschung des Besitzers", len(keys))
 	}
-	// Derselbe Mensch kann sich neu anmelden und bekommt ein frisches Konto.
+	// The same person can sign in again and gets a fresh account.
 	wieder := mustUser(t, s, ctx, "anna", auth.RoleViewer)
 	if wieder.ID == anna.ID {
 		t.Error("Login nach Löschung landete wieder auf der Grabstein-Zeile")

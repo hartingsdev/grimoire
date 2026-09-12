@@ -12,11 +12,10 @@ import (
 	"github.com/hartingsdev/solid-bassoon/internal/store"
 )
 
-// oauthStateTTL begrenzt, wie lange ein begonnener Login eingelöst werden kann.
 const oauthStateTTL = 10 * time.Minute
 
-// handleLogin startet den Authorization Code Flow mit PKCE. State, Nonce und
-// der PKCE-Verifier liegen serverseitig — im Browser landet nichts davon.
+// handleLogin starts the authorization code flow with PKCE. State, nonce and
+// verifier stay server-side; none of it reaches the browser.
 func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	if p := auth.FromContext(r.Context()); p != nil && p.Kind == auth.KindSession {
 		http.Redirect(w, r, "/", http.StatusFound)
@@ -40,8 +39,6 @@ func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, client.AuthCodeURL(state, nonce, verifier), http.StatusFound)
 }
 
-// handleCallback nimmt den Provider entgegen, prüft ID-Token, Nonce und State
-// und legt erst danach eine Sitzung an.
 func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 	query := r.URL.Query()
 	if providerError := query.Get("error"); providerError != "" {
@@ -61,8 +58,7 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 	now := time.Now()
 	nonce, verifier, redirectTo, err := s.store.TakeOAuthState(r.Context(), query.Get("state"), now)
 	if err != nil {
-		// Auch der Fall "zweimal auf denselben Link geklickt" landet hier: ein
-		// State ist genau einmal einlösbar.
+		// Clicking the same link twice lands here too: a state is single-use.
 		s.htmlMessage(w, http.StatusBadRequest, "Anmeldung abgelaufen",
 			"Dieser Anmeldevorgang ist nicht mehr gültig. Bitte erneut anmelden.")
 		return
@@ -81,8 +77,8 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Kein Eintrag in der App entscheidet über den Zugang, sondern der Claim.
-	// Fehlt die Rolle, endet es hier — ohne dass ein Konto angelegt wird.
+	// The claim decides access, not any record in the app. Without a role it
+	// ends here, and no account is created.
 	if !identity.Role.Valid() {
 		s.log.Info("Anmeldung ohne passende Rolle abgelehnt",
 			"sub", identity.Subject, "claim", s.cfg.OIDC.RoleClaim)
@@ -111,8 +107,8 @@ func (s *Server) handleCallback(w http.ResponseWriter, r *http.Request) {
 	http.Redirect(w, r, redirectTo, http.StatusFound)
 }
 
-// handleLogout beendet die Sitzung lokal und nennt, sofern der Provider eine
-// Abmeldeadresse anbietet, den Ort für die Abmeldung dort.
+// handleLogout ends the local session and, if the provider offers one, returns
+// its logout URL.
 func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
 	if p != nil && p.SessionID != "" {
@@ -141,8 +137,7 @@ func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"providerLogoutUrl": providerLogout})
 }
 
-// safeRedirect lässt nur Ziele innerhalb dieser Anwendung zu. Ohne diese Prüfung
-// wäre ?next= eine offene Weiterleitung.
+// safeRedirect keeps ?next= from becoming an open redirect.
 func safeRedirect(next string) string {
 	if next == "" || !strings.HasPrefix(next, "/") || strings.HasPrefix(next, "//") {
 		return "/"
@@ -150,8 +145,8 @@ func safeRedirect(next string) string {
 	return next
 }
 
-// htmlMessage rendert die wenigen Seiten, die vor dem Laden der Oberfläche
-// nötig sind — bewusst ohne Skript und ohne Abhängigkeiten.
+// htmlMessage renders the few pages needed before the UI loads — no script,
+// no dependencies.
 func (s *Server) htmlMessage(w http.ResponseWriter, status int, title, message string) {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(status)

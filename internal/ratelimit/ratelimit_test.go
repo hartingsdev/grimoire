@@ -24,7 +24,7 @@ func TestLimiterBlocksAndRefills(t *testing.T) {
 	if res := l.Allow("k1", now.Add(2*time.Second)); !res.Allowed {
 		t.Error("Eimer füllt sich nicht wieder auf")
 	}
-	// Keys stören einander nicht.
+	// Keys do not interfere with each other.
 	if res := l.Allow("k2", now); !res.Allowed {
 		t.Error("ein anderer Key wurde vom ersten mitbegrenzt")
 	}

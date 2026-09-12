@@ -53,7 +53,6 @@ func testServer(t *testing.T) (*Server, *store.Store, *config.Config) {
 	return srv, st, cfg
 }
 
-// mustKey legt einen Nutzer samt API-Key an und liefert den Klartext-Key.
 func mustKey(t *testing.T, st *store.Store, sub string, userRole, keyRole auth.Role) string {
 	t.Helper()
 	now := time.Now()
@@ -91,8 +90,8 @@ func do(t *testing.T, srv *Server, method, path, key string, bodies ...string) *
 	return w
 }
 
-// Jede Route muss ihren Schutz deklarieren. Diese Prüfung läuft auch beim Start
-// des Prozesses — eine vergessene Absicherung ist damit kein stiller Mangel.
+// Every route must declare its protection. The same check runs at startup, so
+// a forgotten guard is never a silent hole.
 func TestEveryRouteDeclaresItsProtection(t *testing.T) {
 	srv, _, _ := testServer(t)
 	if err := srv.verifyRoutes(); err != nil {
@@ -108,9 +107,9 @@ func TestEveryRouteDeclaresItsProtection(t *testing.T) {
 	}
 }
 
-// Die tragende Invariante, an der Routentabelle geprüft: keine Route gibt einem
-// API-Key ein Verwaltungsrecht. Wird später eine Admin-Route ergänzt und die
-// Ableitung dabei umgangen, wird dieser Test rot.
+// The load-bearing invariant, checked against the route table: no route hands
+// an API key a management capability. Add an admin route that bypasses the
+// derivation and this test goes red.
 func TestNoRouteGrantsManagementCapabilityToAPIKey(t *testing.T) {
 	srv, _, _ := testServer(t)
 	for _, route := range srv.Routes() {
@@ -132,8 +131,8 @@ func TestNoRouteGrantsManagementCapabilityToAPIKey(t *testing.T) {
 	}
 }
 
-// Dieselbe Invariante noch einmal über echte HTTP-Aufrufe: ein Key mit der
-// höchsten für Keys erreichbaren Rolle wird auf jeder Verwaltungsroute abgewiesen.
+// The same invariant over real HTTP: a key with the highest role a key can
+// hold is refused on every management route.
 func TestManagementRoutesRejectAPIKeysOverHTTP(t *testing.T) {
 	srv, st, _ := testServer(t)
 	key := mustKey(t, st, "admin", auth.RoleAdmin, auth.RoleEditor)
@@ -173,8 +172,7 @@ func TestManagementRoutesRejectAPIKeysOverHTTP(t *testing.T) {
 	}
 }
 
-// Ein Nur-Lesen-Key darf über die API genauso wenig schreiben wie ein
-// Betrachter in der Oberfläche.
+// A read-only key can write through the API no more than a viewer can in the UI.
 func TestViewerKeyCannotWrite(t *testing.T) {
 	srv, st, _ := testServer(t)
 	viewer := mustKey(t, st, "anna", auth.RoleEditor, auth.RoleViewer)
@@ -192,8 +190,8 @@ func TestViewerKeyCannotWrite(t *testing.T) {
 	}
 }
 
-// Ein Key kann nie mehr als sein Besitzer: wird dieser herabgestuft, verliert
-// auch sein Schreib-Key das Schreibrecht — ohne Zutun.
+// A key never outranks its owner: demote them and the write key loses write
+// access by itself.
 func TestKeyFollowsOwnerDowngrade(t *testing.T) {
 	srv, st, _ := testServer(t)
 	key := mustKey(t, st, "anna", auth.RoleEditor, auth.RoleEditor)
@@ -213,7 +211,7 @@ func TestKeyFollowsOwnerDowngrade(t *testing.T) {
 		t.Errorf("Lesen sollte weiterhin möglich sein: %d", w.Code)
 	}
 
-	// Zugang ganz entzogen: der Key ist inaktiv, aber nicht widerrufen.
+	// Access withdrawn entirely: the key goes inactive, not revoked.
 	if err := st.SetCachedRole(t.Context(), users[0].ID, auth.RoleNone, time.Now()); err != nil {
 		t.Fatal(err)
 	}
@@ -251,8 +249,8 @@ func TestKeyRejections(t *testing.T) {
 	}
 }
 
-// Der Klartext eines Keys darf nie als Query-Parameter akzeptiert werden — dort
-// landete er in Zugriffsprotokollen und Proxy-Zwischenspeichern.
+// A key must never be accepted as a query parameter: it would land in access
+// logs and proxy caches.
 func TestKeyInQueryParameterIsIgnored(t *testing.T) {
 	srv, st, _ := testServer(t)
 	key := mustKey(t, st, "anna", auth.RoleEditor, auth.RoleViewer)
@@ -288,14 +286,14 @@ func TestHealthAndReadiness(t *testing.T) {
 	if w := do(t, srv, "GET", "/healthz", ""); w.Code != http.StatusOK {
 		t.Errorf("/healthz: Status %d", w.Code)
 	}
-	// Ohne erreichbaren Provider ist die Instanz nicht bereit.
+	// Without a reachable provider the instance is not ready.
 	if w := do(t, srv, "GET", "/readyz", ""); w.Code != http.StatusServiceUnavailable {
 		t.Errorf("/readyz ohne Provider: Status %d, erwartet 503", w.Code)
 	}
 }
 
-// Break-Glass: ein Administrator kommt an einen fremden privaten Eintrag, aber
-// nur einzeln, nur mit Begründung — und der Besitzer sieht es hinterher.
+// Break-glass: an admin can reach someone else's private prompt, but one at a
+// time, only with a reason — and the owner sees it afterwards.
 func TestBreakGlassIsAuditedAndVisibleToOwner(t *testing.T) {
 	srv, st, _ := testServer(t)
 	now := time.Now()
@@ -314,7 +312,7 @@ func TestBreakGlassIsAuditedAndVisibleToOwner(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Ohne Begründung: keine Freischaltung.
+	// No reason, no reveal.
 	w := call(t, srv, "POST", "/api/v1/admin/prompts/"+priv.ID+"/reveal", admin, `{"reason":""}`)
 	if w.Code != http.StatusBadRequest || !strings.Contains(w.Body.String(), "reason_required") {
 		t.Errorf("Freischaltung ohne Begründung: Status %d, %s", w.Code, w.Body.String())
@@ -329,7 +327,7 @@ func TestBreakGlassIsAuditedAndVisibleToOwner(t *testing.T) {
 		t.Error("Inhalt wurde nicht geliefert")
 	}
 
-	// Der Besitzer sieht den Vorgang in seinem eigenen Protokoll.
+	// The owner sees it in their own audit trail.
 	w = call(t, srv, "GET", "/api/v1/me/audit", anna, "")
 	if w.Code != http.StatusOK {
 		t.Fatalf("eigenes Protokoll: Status %d", w.Code)
@@ -340,7 +338,6 @@ func TestBreakGlassIsAuditedAndVisibleToOwner(t *testing.T) {
 	}
 }
 
-// call führt einen Aufruf als angemeldeter Mensch aus (Cookie-Sitzung statt Key).
 func call(t *testing.T, srv *Server, method, path string, user store.User, body string) *httptest.ResponseRecorder {
 	t.Helper()
 	now := time.Now()
@@ -364,8 +361,7 @@ func call(t *testing.T, srv *Server, method, path string, user store.User, body 
 	return w
 }
 
-// Ohne CSRF-Token wird ein schreibender Zugriff aus dem Browser abgewiesen,
-// auch bei gültiger Sitzung.
+// A browser write without a CSRF token is refused even with a valid session.
 func TestSessionWriteRequiresCSRFToken(t *testing.T) {
 	srv, st, _ := testServer(t)
 	now := time.Now()

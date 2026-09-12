@@ -44,8 +44,8 @@ func toKeyJSON(k store.APIKey, now time.Time) apiKeyJSON {
 	case k.Expired(now):
 		out.Status, out.StatusNote = "expired", "Abgelaufen."
 	case !k.EffectiveRole.Valid():
-		// Nicht widerrufen, aber wirkungslos: der Besitzer hat gerade keinen
-		// Zugang oder war zu lange nicht angemeldet. Reversibel.
+		// Not revoked but ineffective: the owner has no access right now, or
+		// has not signed in for too long. Reversible.
 		out.Status = "inactive"
 		out.StatusNote = "Inaktiv – der Besitzer hat derzeit keinen Zugang."
 	case k.EffectiveRole != k.Role:
@@ -58,8 +58,8 @@ func toKeyJSON(k store.APIKey, now time.Time) apiKeyJSON {
 	return out
 }
 
-// handleListKeys zeigt Metadaten, nie den Key selbst. Bearbeiter sehen ihre
-// eigenen, Admins auf Wunsch alle.
+// handleListKeys shows metadata, never the key. Editors see their own, admins
+// may ask for all.
 func (s *Server) handleListKeys(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
 	ownerFilter := p.UserID
@@ -86,8 +86,8 @@ func (s *Server) handleListKeys(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleCreateKey stellt einen Key aus. Der Klartext steht genau in dieser
-// einen Antwort und danach nirgends mehr.
+// handleCreateKey issues a key. The plaintext exists in this one response and
+// nowhere afterwards.
 func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
 	var in struct {
@@ -110,7 +110,7 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "bad_request", "role muss 'viewer' oder 'editor' sein.")
 		return
 	case role == auth.RoleAdmin:
-		// Es gibt keine Admin-Keys. Verwaltung findet ausschließlich im Browser statt.
+		// There are no admin keys. Management happens in the browser only.
 		writeError(w, http.StatusBadRequest, "bad_request",
 			"Für Keys gibt es die Rolle 'admin' nicht: Keys können weder Keys noch Nutzer verwalten.")
 		return
@@ -148,7 +148,7 @@ func (s *Server) handleCreateKey(w http.ResponseWriter, r *http.Request) {
 
 	writeJSON(w, http.StatusCreated, map[string]any{
 		"key": toKeyJSON(key, now),
-		// Einzige Stelle, an der der Klartext die Anwendung verlässt.
+		// The only place the plaintext leaves the application.
 		"plaintext": plaintext,
 		"hinweis":   "Dieser Key wird nur jetzt angezeigt. Danach ist er nicht mehr abrufbar.",
 	})
@@ -175,7 +175,6 @@ func (s *Server) handleRevokeKey(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// audit hängt einen Protokolleintrag an und füllt den Handelnden aus dem Request.
 func (s *Server) audit(r *http.Request, e store.AuditEntry) {
 	if p := auth.FromContext(r.Context()); p != nil {
 		e.ActorID, e.ActorKind = p.UserID, string(p.Kind)

@@ -1,5 +1,5 @@
-// Kommando prompt-library: ein Prozess je Instanz, der Oberfläche und REST-API
-// auf demselben Port ausliefert.
+// Command promptory serves the UI and the REST API of one instance on a
+// single port.
 package main
 
 import (
@@ -70,9 +70,9 @@ func run() error {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
-	// Die Discovery läuft nebenher und wiederholt sich. Ein Provider, der beim
-	// Start gerade nicht antwortet, darf den Container nicht in eine
-	// Neustartschleife schicken — /readyz meldet solange "nicht bereit".
+	// Discovery retries in the background: an IdP that happens to be down must
+	// not put the container into a restart loop. /readyz reports not-ready
+	// until it succeeds.
 	go provider.Discover(ctx)
 	go background(ctx, api, log)
 
@@ -105,9 +105,8 @@ func run() error {
 	return srv.Shutdown(shutdownCtx)
 }
 
-// staticFS liefert die eingebettete Oberfläche — oder ein Verzeichnis von der
-// Platte, wenn STATIC_DIR gesetzt ist. Damit lässt sich an CSS und JS arbeiten,
-// ohne neu zu übersetzen.
+// staticFS serves the embedded UI, or a directory from disk when STATIC_DIR
+// is set, so CSS and JS can be edited without recompiling.
 func staticFS(dir string, log *slog.Logger) (fs.FS, error) {
 	if dir == "" {
 		return web.FS, nil
@@ -140,8 +139,8 @@ func newLogger(level string) *slog.Logger {
 	return slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: l}))
 }
 
-// runHealthcheck fragt den eigenen Prozess ab. Das Laufzeit-Image hat keine
-// Shell und kein curl, deshalb bringt die Binary die Prüfung selbst mit.
+// runHealthcheck probes this process. The runtime image has no shell and no
+// curl, so the binary carries its own check.
 func runHealthcheck() int {
 	addr := os.Getenv("LISTEN_ADDR")
 	if addr == "" {

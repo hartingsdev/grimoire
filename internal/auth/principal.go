@@ -5,8 +5,8 @@ import (
 	"time"
 )
 
-// Principal ist das Ergebnis der Authentifizierung — egal ob per Cookie-Session
-// oder per API-Key. Ab hier kennt kein Handler mehr den Unterschied.
+// Principal is the result of authentication, by cookie session or API key.
+// Past this point no handler knows the difference.
 type Principal struct {
 	Kind        Kind
 	UserID      string // interne users.id, auch bei API-Keys die des Besitzers
@@ -23,7 +23,6 @@ type Principal struct {
 	caps CapSet
 }
 
-// Can prüft ein einzelnes Recht.
 func (p *Principal) Can(cap Capability) bool {
 	if p == nil {
 		return false
@@ -34,7 +33,6 @@ func (p *Principal) Can(cap Capability) bool {
 	return p.caps.Has(cap)
 }
 
-// CapabilityList liefert die Rechte als sortierbare Liste für /api/v1/me.
 func (p *Principal) CapabilityList() []Capability {
 	if p == nil {
 		return nil
@@ -60,15 +58,14 @@ func WithPrincipal(ctx context.Context, p *Principal) context.Context {
 	return context.WithValue(ctx, ctxKey{}, p)
 }
 
-// FromContext liefert den Principal des laufenden Requests, oder nil.
 func FromContext(ctx context.Context) *Principal {
 	p, _ := ctx.Value(ctxKey{}).(*Principal)
 	return p
 }
 
-// OwnerStale meldet, ob die zwischengespeicherte Rolle des Key-Besitzers zu alt
-// ist, um ihr noch zu trauen. Meldet sich jemand nie wieder an, laufen seine
-// Keys dadurch aus, statt mit einer veralteten Rolle weiterzulaufen.
+// OwnerStale reports whether a key owner's cached role is too old to trust.
+// Without it, the keys of someone who never signs in again would keep running
+// on a stale role.
 func OwnerStale(cachedAt time.Time, maxAge time.Duration, now time.Time) bool {
 	if maxAge <= 0 {
 		return false

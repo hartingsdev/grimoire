@@ -1,6 +1,6 @@
-// Package config lädt und prüft die Instanz-Konfiguration aus der Umgebung.
-// Jede Instanz (privat, arbeit) bekommt eine eigene .env-Datei; der Prozess
-// selbst kennt nur Umgebungsvariablen.
+// Package config loads and validates one instance's configuration from the
+// environment. Each instance gets its own .env file; the process itself only
+// ever sees environment variables.
 package config
 
 import (
@@ -14,22 +14,17 @@ import (
 	"time"
 )
 
-// AdminPrivateAccess steuert, ob Admins an fremde private Prompts kommen.
+// AdminPrivateAccess controls whether admins can reach other people's private prompts.
 type AdminPrivateAccess string
 
 const (
-	// AdminPrivateNone: Admins sehen private Prompts anderer nie, auch nicht protokolliert.
-	AdminPrivateNone AdminPrivateAccess = "none"
-	// AdminPrivateBreakGlass: Einzelfreigabe mit Pflichtbegründung, protokolliert,
-	// für den Besitzer sichtbar.
+	AdminPrivateNone       AdminPrivateAccess = "none"
 	AdminPrivateBreakGlass AdminPrivateAccess = "break-glass"
-	// AdminPrivateFull: Admins lesen private Prompts frei. Die Oberfläche sagt das
-	// am Sichtbarkeits-Schalter ausdrücklich.
-	AdminPrivateFull AdminPrivateAccess = "full"
+	AdminPrivateFull       AdminPrivateAccess = "full"
 )
 
-// ClaimsSource bestimmt, woher die Claims für das Rollen-Mapping kommen.
-// Viele Provider liefern Gruppen nur am userinfo-Endpunkt, nicht im ID-Token.
+// ClaimsSource decides where role-mapping claims come from. Many providers
+// expose groups only at userinfo, not in the ID token.
 type ClaimsSource string
 
 const (
@@ -77,15 +72,14 @@ type Config struct {
 
 var instanceRe = regexp.MustCompile(`^[a-z0-9]{1,16}$`)
 
-// Load liest die Konfiguration aus der Umgebung und prüft sie vollständig,
-// bevor der Prozess irgendetwas anderes tut. Fehlkonfiguration ist ein
-// Startfehler, kein Laufzeitproblem.
+// Load reads and fully validates the configuration before the process does
+// anything else. Misconfiguration is a startup failure, not a runtime surprise.
 func Load() (*Config, error) {
 	var errs []string
 	fail := func(format string, a ...any) { errs = append(errs, fmt.Sprintf(format, a...)) }
 
 	c := &Config{
-		AppTitle:    env("APP_TITLE", "Prompt-Bibliothek"),
+		AppTitle:    env("APP_TITLE", "Promptory"),
 		AppInstance: env("APP_INSTANCE", ""),
 		BaseURL:     strings.TrimRight(env("BASE_URL", ""), "/"),
 		ListenAddr:  env("LISTEN_ADDR", ":8080"),
@@ -137,8 +131,7 @@ func Load() (*Config, error) {
 		ClaimsSource:       ClaimsSource(env("OIDC_CLAIMS_SOURCE", string(ClaimsBoth))),
 		PostLogoutRedirect: env("OIDC_POST_LOGOUT_REDIRECT", ""),
 	}
-	// Als Liste, nicht als Map: die Fehlermeldung soll bei jedem Start in
-	// derselben Reihenfolge erscheinen.
+	// A slice, not a map: the error list should read the same on every start.
 	for _, required := range []struct{ name, value string }{
 		{"OIDC_ISSUER", c.OIDC.Issuer},
 		{"OIDC_CLIENT_ID", c.OIDC.ClientID},

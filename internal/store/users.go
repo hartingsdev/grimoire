@@ -15,7 +15,6 @@ var ErrNotFound = errors.New("nicht gefunden")
 const userColumns = `id, sub, email, display_name, cached_role, cached_role_at,
 	created_at, last_login_at, deleted_at`
 
-// userColumnsU ist dieselbe Spaltenliste, qualifiziert für Abfragen mit Join.
 const userColumnsU = `u.id, u.sub, u.email, u.display_name, u.cached_role, u.cached_role_at,
 	u.created_at, u.last_login_at, u.deleted_at`
 
@@ -37,9 +36,9 @@ func scanUser(row interface{ Scan(...any) error }) (User, error) {
 	return u, nil
 }
 
-// UpsertUserOnLogin legt beim ersten Login eine Nutzerzeile an und aktualisiert
-// sie bei jedem weiteren. Es gibt keinen Freischaltschritt in der App: wer im
-// IdP eine passende Rolle hat, hat Zugang.
+// UpsertUserOnLogin creates the user row on first login and refreshes it on
+// every later one. There is no approval step in the app: whoever has a matching
+// role at the IdP has access.
 func (s *Store) UpsertUserOnLogin(ctx context.Context, sub, email, name string, role auth.Role, now time.Time) (User, error) {
 	var u User
 	err := s.tx(ctx, func(tx *sql.Tx) error {
@@ -85,9 +84,9 @@ func (s *Store) GetUser(ctx context.Context, id string) (User, error) {
 	return u, err
 }
 
-// SetCachedRole schreibt das Ergebnis einer Revalidierung fort. Wird auch mit
-// auth.RoleNone aufgerufen, wenn der Provider autoritativ keine Rolle mehr
-// liefert — ein Netzwerkfehler führt nie hierher.
+// SetCachedRole records the result of a revalidation, including auth.RoleNone
+// when the provider authoritatively reports no role. A network error never
+// reaches this function.
 func (s *Store) SetCachedRole(ctx context.Context, userID string, role auth.Role, at time.Time) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE users SET cached_role = ?, cached_role_at = ? WHERE id = ?`,
@@ -113,8 +112,8 @@ func (s *Store) ListUsers(ctx context.Context) ([]User, error) {
 	return out, rows.Err()
 }
 
-// UserFootprint zählt, was an einem Nutzer hängt — Grundlage für den
-// Bestätigungsdialog beim Löschen. Inhalte werden dabei nicht gelesen.
+// UserFootprint counts what hangs off a user, for the deletion dialog. No
+// content is read.
 type UserFootprint struct {
 	SharedPrompts  int
 	PrivatePrompts int
@@ -133,17 +132,16 @@ func (s *Store) UserFootprint(ctx context.Context, userID string) (UserFootprint
 	return f, err
 }
 
-// DeleteUserOptions steuert, was mit den privaten Prompts geschieht.
 type DeleteUserOptions struct {
-	// TransferPrivateTo überträgt die privaten Prompts an diese Nutzer-ID statt
-	// sie zu löschen. Das verschafft dem Ziel Lesezugriff und ist deshalb nur
-	// zulässig, wenn ADMIN_PRIVATE_ACCESS es erlaubt — und wird protokolliert.
+	// TransferPrivateTo hands the private prompts to this user instead of
+	// deleting them. That grants read access, so it is gated on
+	// ADMIN_PRIVATE_ACCESS and always audited.
 	TransferPrivateTo string
 }
 
-// DeleteUser macht aus der Nutzerzeile einen Grabstein: sub, E-Mail und Name
-// werden geleert, die Zeile selbst bleibt als Ziel aller Fremdschlüssel stehen.
-// Geteilte Prompts bleiben erhalten — das ist Teamwissen, kein Privatbesitz.
+// DeleteUser turns the user row into a tombstone: sub, email and name are
+// cleared while the row stays as the target of every foreign key. Shared
+// prompts survive — that is team knowledge, not personal property.
 func (s *Store) DeleteUser(ctx context.Context, userID string, opts DeleteUserOptions, now time.Time) error {
 	return s.tx(ctx, func(tx *sql.Tx) error {
 		if opts.TransferPrivateTo != "" {

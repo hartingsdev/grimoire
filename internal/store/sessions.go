@@ -9,9 +9,8 @@ import (
 	"github.com/hartingsdev/solid-bassoon/internal/auth"
 )
 
-// CreateSession legt eine Browser-Sitzung an. Die Provider-Tokens werden
-// verschlüsselt abgelegt, damit die Sitzung später beim IdP nachfragen kann,
-// ob die Rolle noch gilt.
+// CreateSession opens a browser session. Provider tokens are stored encrypted
+// so the session can later re-check the role with the IdP.
 func (s *Store) CreateSession(ctx context.Context, userID string, role auth.Role,
 	accessToken, refreshToken string, tokenExpiry time.Time,
 	now, expiresAt, revalidateAfter time.Time) (Session, error) {
@@ -38,8 +37,6 @@ func (s *Store) CreateSession(ctx context.Context, userID string, role auth.Role
 	return sess, err
 }
 
-// GetSession liefert Sitzung und Nutzer. Abgelaufene Sitzungen gelten als nicht
-// vorhanden.
 func (s *Store) GetSession(ctx context.Context, id string, now time.Time) (Session, User, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT s.id, s.user_id, s.role, s.csrf_token,
 		s.created_at, s.expires_at, s.last_seen_at, s.revalidate_after,
@@ -71,9 +68,8 @@ func (s *Store) GetSession(ctx context.Context, id string, now time.Time) (Sessi
 	sess.Role = auth.ParseRole(role)
 	sess.CreatedAt, sess.ExpiresAt = time.Unix(created, 0), time.Unix(expires, 0)
 	sess.LastSeenAt, sess.RevalidateAfter = time.Unix(lastSeen, 0), time.Unix(reval, 0)
-	// Lassen sich die Tokens nicht entschlüsseln (gewechselter Schlüssel), gilt
-	// die Sitzung als nicht revalidierbar — sie wird beim nächsten Fälligwerden
-	// verworfen statt stillschweigend weiterzulaufen.
+	// If the tokens will not decrypt (rotated key), the session cannot be
+	// revalidated and is dropped when revalidation next falls due.
 	sess.AccessToken, _ = s.open(access)
 	sess.RefreshToken, _ = s.open(refresh)
 	if tokenExpiry > 0 {
@@ -95,8 +91,6 @@ func (s *Store) TouchSession(ctx context.Context, id string, now time.Time) erro
 	return err
 }
 
-// UpdateSessionAfterRevalidation schreibt die beim IdP frisch bestätigte Rolle
-// und die neuen Tokens fort.
 func (s *Store) UpdateSessionAfterRevalidation(ctx context.Context, id string, role auth.Role,
 	accessToken, refreshToken string, tokenExpiry, revalidateAfter time.Time) error {
 
@@ -119,15 +113,15 @@ func (s *Store) DeleteSession(ctx context.Context, id string) error {
 	return err
 }
 
-// DeleteSessionsForUser beendet alle Sitzungen eines Nutzers — nach einem
-// Rollenentzug im IdP oder beim Löschen des Nutzers.
+// DeleteSessionsForUser ends every session of one user, after a role was
+// withdrawn at the IdP or the user was deleted.
 func (s *Store) DeleteSessionsForUser(ctx context.Context, userID string) error {
 	_, err := s.db.ExecContext(ctx, `DELETE FROM sessions WHERE user_id = ?`, userID)
 	return err
 }
 
-// SaveOAuthState hinterlegt State, Nonce und PKCE-Verifier für einen laufenden
-// Login. Serverseitig, damit nichts davon im Browser landet.
+// SaveOAuthState parks state, nonce and PKCE verifier for a login in flight —
+// server-side, so none of it reaches the browser.
 func (s *Store) SaveOAuthState(ctx context.Context, state, nonce, verifier, redirectTo string, now, expiresAt time.Time) error {
 	_, err := s.db.ExecContext(ctx, `INSERT INTO oauth_states
 		(state, nonce, pkce_verifier, redirect_to, created_at, expires_at) VALUES (?,?,?,?,?,?)`,
@@ -135,8 +129,7 @@ func (s *Store) SaveOAuthState(ctx context.Context, state, nonce, verifier, redi
 	return err
 }
 
-// TakeOAuthState holt einen State ab und löscht ihn dabei: jeder Login-Vorgang
-// ist genau einmal einlösbar.
+// TakeOAuthState consumes a state: every login is redeemable exactly once.
 func (s *Store) TakeOAuthState(ctx context.Context, state string, now time.Time) (nonce, verifier, redirectTo string, err error) {
 	err = s.tx(ctx, func(tx *sql.Tx) error {
 		row := tx.QueryRowContext(ctx,

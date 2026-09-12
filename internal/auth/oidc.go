@@ -15,8 +15,8 @@ import (
 	"github.com/hartingsdev/solid-bassoon/internal/config"
 )
 
-// Identity ist das, was die App nach einem Login oder einer Revalidierung über
-// einen Menschen weiß. Die Rolle stammt ausschließlich aus den Claims.
+// Identity is what the app knows about a person after a login or a
+// revalidation. The role comes from the claims and nowhere else.
 type Identity struct {
 	Subject     string
 	Email       string
@@ -24,13 +24,12 @@ type Identity struct {
 	Role        Role
 }
 
-// ErrProviderUnavailable bedeutet: der IdP hat nicht geantwortet. Das ist
-// ausdrücklich KEINE autoritative Auskunft "kein Zugriff" — der Aufrufer darf
-// daraufhin niemandem Rechte entziehen.
+// ErrProviderUnavailable means the IdP did not answer. This is explicitly NOT
+// an authoritative "no access" — the caller must not revoke anything over it.
 var ErrProviderUnavailable = errors.New("OIDC-Provider nicht erreichbar")
 
-// ErrSessionEndedAtProvider bedeutet: der Provider hat die Sitzung beendet oder
-// den Refresh-Token verworfen. Das ist autoritativ.
+// ErrSessionEndedAtProvider means the provider ended the session or rejected
+// the refresh token. This is authoritative.
 var ErrSessionEndedAtProvider = errors.New("Sitzung beim Provider beendet")
 
 type OIDCClient struct {
@@ -43,10 +42,10 @@ type OIDCClient struct {
 	postLogout    string
 }
 
-// Provider hält den OIDC-Client und holt die Discovery notfalls im Hintergrund
-// nach. Ist der IdP beim Start nicht erreichbar, läuft der Prozess trotzdem an
-// und meldet sich nur als "nicht bereit" — ein Container, der beim Neustart in
-// eine Crash-Schleife läuft, weil der IdP gerade neu startet, hilft niemandem.
+// Provider holds the OIDC client and retries discovery in the background. If
+// the IdP is down at startup the process still comes up and reports "not
+// ready": a container that crash-loops because the IdP is restarting helps
+// nobody.
 type Provider struct {
 	cfg    config.OIDC
 	log    *slog.Logger
@@ -66,8 +65,8 @@ func NewProvider(cfg config.OIDC, log *slog.Logger) (*Provider, error) {
 		err: fmt.Errorf("%w: Discovery läuft noch", ErrProviderUnavailable)}, nil
 }
 
-// Discover versucht die Provider-Konfiguration zu laden und wiederholt das im
-// Hintergrund, bis es klappt oder der Kontext endet.
+// Discover loads the provider configuration, retrying until it succeeds or
+// the context ends.
 func (p *Provider) Discover(ctx context.Context) {
 	delay := time.Second
 	for {
@@ -119,7 +118,6 @@ func (p *Provider) connect(ctx context.Context) (*OIDCClient, error) {
 	}, nil
 }
 
-// Client liefert den einsatzbereiten Client oder den Grund, warum es noch keinen gibt.
 func (p *Provider) Client() (*OIDCClient, error) {
 	p.mu.RLock()
 	defer p.mu.RUnlock()
@@ -131,8 +129,8 @@ func (p *Provider) Ready() bool {
 	return err == nil
 }
 
-// AuthCodeURL baut die Weiterleitung zum Provider — Authorization Code Flow mit
-// PKCE, State und Nonce.
+// AuthCodeURL builds the redirect to the provider: authorization code flow
+// with PKCE, state and nonce.
 func (c *OIDCClient) AuthCodeURL(state, nonce, verifier string) string {
 	return c.oauth.AuthCodeURL(state,
 		oidc.Nonce(nonce),
@@ -140,11 +138,10 @@ func (c *OIDCClient) AuthCodeURL(state, nonce, verifier string) string {
 		oauth2.AccessTypeOffline)
 }
 
-// NewVerifier erzeugt einen PKCE-Verifier.
 func NewVerifier() string { return oauth2.GenerateVerifier() }
 
-// Exchange löst den Autorisierungscode ein und prüft das ID-Token gegen Nonce
-// und Signatur des Providers.
+// Exchange redeems the authorization code and verifies the ID token against
+// the provider's signature and the nonce.
 func (c *OIDCClient) Exchange(ctx context.Context, code, verifier, nonce string) (Identity, *oauth2.Token, error) {
 	token, err := c.oauth.Exchange(ctx, code, oauth2.VerifierOption(verifier))
 	if err != nil {
@@ -175,12 +172,12 @@ func (c *OIDCClient) Exchange(ctx context.Context, code, verifier, nonce string)
 	return identity, token, nil
 }
 
-// Revalidate fragt den Provider, ob die Rolle noch gilt. Der zurückgegebene
-// Token kann erneuert sein und gehört dann gespeichert.
+// Revalidate asks the provider whether the role still holds. The returned
+// token may have been refreshed and should then be persisted.
 //
-// Fehlerfälle sind sorgfältig getrennt: ErrProviderUnavailable heißt "keine
-// Auskunft" und darf niemandem etwas wegnehmen; ErrSessionEndedAtProvider und
-// eine Identität mit RoleNone sind autoritativ.
+// The error cases are deliberately distinct: ErrProviderUnavailable means "no
+// answer" and must take nothing away; ErrSessionEndedAtProvider and an identity
+// with RoleNone are authoritative.
 func (c *OIDCClient) Revalidate(ctx context.Context, tok *oauth2.Token) (Identity, *oauth2.Token, error) {
 	source := c.oauth.TokenSource(ctx, tok)
 	fresh, err := source.Token()
@@ -207,9 +204,9 @@ func (c *OIDCClient) Revalidate(ctx context.Context, tok *oauth2.Token) (Identit
 	return identity, fresh, nil
 }
 
-// identityFrom führt die Claims aus ID-Token und userinfo zusammen. Viele
-// Provider liefern Gruppen nur am userinfo-Endpunkt — deshalb ist "both" der
-// Standard und erspart das klassische "warum ist mein groups-Claim leer".
+// identityFrom merges claims from the ID token and userinfo. Many providers
+// only expose groups at the userinfo endpoint, which is why "both" is the
+// default and spares the classic "why is my groups claim empty".
 func (c *OIDCClient) identityFrom(ctx context.Context, idClaims map[string]any, token *oauth2.Token) (Identity, error) {
 	merged := map[string]any{}
 	if c.claimsSource == config.ClaimsIDToken || c.claimsSource == config.ClaimsBoth {
@@ -223,7 +220,7 @@ func (c *OIDCClient) identityFrom(ctx context.Context, idClaims map[string]any, 
 			if c.claimsSource == config.ClaimsUserinfo {
 				return Identity{}, fmt.Errorf("userinfo nicht abrufbar: %w", err)
 			}
-			// Bei "both" ist userinfo eine Ergänzung, kein Muss.
+			// Under "both", userinfo is a supplement, not a requirement.
 		} else {
 			infoClaims := map[string]any{}
 			if err := info.Claims(&infoClaims); err == nil {
@@ -246,7 +243,6 @@ func (c *OIDCClient) identityFromClaims(claims map[string]any) Identity {
 	}
 }
 
-// EndSessionURL liefert die Abmelde-Adresse des Providers, sofern er eine anbietet.
 func (c *OIDCClient) EndSessionURL() (string, string) {
 	return c.endSessionURL, c.postLogout
 }

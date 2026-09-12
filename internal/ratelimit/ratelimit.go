@@ -1,8 +1,8 @@
-// Package ratelimit begrenzt die Anfragen pro API-Key.
+// Package ratelimit caps requests per API key.
 //
-// Der Zustand liegt im Prozessspeicher: eine Instanz ist genau ein Prozess mit
-// einer SQLite-Datei und lässt sich ohnehin nicht waagerecht skalieren. Ein
-// Zähler in der Datenbank würde nur Schreibzugriffe erzeugen.
+// State lives in process memory: an instance is one process over one SQLite
+// file and cannot scale horizontally anyway, so a counter in the database
+// would only add writes.
 package ratelimit
 
 import (
@@ -22,8 +22,8 @@ type Limiter struct {
 	burst   float64
 }
 
-// New erzeugt einen Begrenzer mit perMin Anfragen pro Minute. Der Eimer fasst
-// eine Minute, damit ein Skript kurz aufholen darf, ohne dauerhaft zu überziehen.
+// New builds a limiter of perMin requests per minute. The bucket holds one
+// minute's worth so a script may catch up briefly without sustained overuse.
 func New(perMin int) *Limiter {
 	if perMin < 1 {
 		perMin = 1
@@ -43,8 +43,8 @@ type Result struct {
 	RetryAfter time.Duration
 }
 
-// Allow nimmt eine Anfrage ab und liefert die Werte für die RateLimit-Header,
-// damit sich aufrufende Skripte von selbst bremsen können.
+// Allow accounts for one request and returns the RateLimit header values, so
+// callers can pace themselves instead of running into 429s.
 func (l *Limiter) Allow(key string, now time.Time) Result {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -74,7 +74,7 @@ func (l *Limiter) Allow(key string, now time.Time) Result {
 	return res
 }
 
-// Cleanup verwirft Eimer, die lange nicht benutzt wurden.
+// Cleanup drops buckets that have been idle.
 func (l *Limiter) Cleanup(now time.Time, idle time.Duration) {
 	l.mu.Lock()
 	defer l.mu.Unlock()

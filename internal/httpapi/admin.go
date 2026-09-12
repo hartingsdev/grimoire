@@ -12,8 +12,8 @@ import (
 	"github.com/hartingsdev/solid-bassoon/internal/store"
 )
 
-// handleMe beantwortet "wer bin ich und was darf ich" — die Grundlage dafür,
-// dass die Oberfläche nur anbietet, was auch durchgeht.
+// handleMe answers "who am I and what may I do", so the UI only offers what
+// would actually pass.
 func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
 	caps := make([]string, 0, 6)
@@ -33,7 +33,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 			"name":               s.cfg.AppInstance,
 			"privatePrompts":     s.cfg.PrivatePrompts,
 			"adminPrivateAccess": string(s.cfg.AdminPrivateAccess),
-			// Damit die Oberfläche am Sichtbarkeits-Schalter die Wahrheit sagt.
+			// So the UI can tell the truth at the visibility toggle.
 			"privateVisibleToAdmins": s.cfg.AdminPrivateAccess == config.AdminPrivateFull,
 		},
 	}
@@ -56,7 +56,7 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	for _, u := range users {
 		out = append(out, map[string]any{
 			"id": u.ID, "name": u.Name(), "email": u.Email, "subject": u.Sub,
-			// Ausdrücklich als Cache gekennzeichnet: die Wahrheit steht im IdP.
+			// Marked as a cache on purpose: the truth lives in the IdP.
 			"lastSeenRole":   string(u.CachedRole),
 			"lastSeenRoleAt": u.CachedRoleAt,
 			"lastLoginAt":    u.LastLoginAt,
@@ -70,8 +70,8 @@ func (s *Server) handleListUsers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleUserFootprint zählt, was an einem Nutzer hängt — die Grundlage für den
-// Bestätigungsdialog. Inhalte werden dabei nicht gelesen.
+// handleUserFootprint counts what hangs off a user for the confirmation
+// dialog. No content is read.
 func (s *Server) handleUserFootprint(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	user, err := s.store.GetUser(r.Context(), id)
@@ -96,12 +96,12 @@ func (s *Server) handleUserFootprint(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// handleDeleteUser entfernt einen Nutzer aus dieser Instanz.
+// handleDeleteUser removes a user from this instance.
 //
-// Geteilte Prompts bleiben erhalten und werden dem Grabstein zugeschrieben —
-// das ist Teamwissen. Private Prompts werden gelöscht; sie stattdessen zu
-// übernehmen verschafft dem Admin Lesezugriff und ist deshalb dieselbe
-// Einzelfallentscheidung wie das Freischalten, mit Pflichtbegründung im Protokoll.
+// Shared prompts stay and are attributed to the tombstone — that is team
+// knowledge. Private prompts are deleted; taking them over instead grants the
+// admin read access and is therefore the same deliberate act as a reveal, with
+// a mandatory reason in the audit log.
 func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
 	id := r.PathValue("id")
@@ -160,13 +160,11 @@ func (s *Server) handleDeleteUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// handleRevealPrivate schaltet einen einzelnen fremden privaten Eintrag für
-// einen Administrator frei.
+// handleRevealPrivate opens one other person's private prompt to an admin.
 //
-// Das ist die Antwort auf den Verdachtsfall, ohne "privat" zu einer leeren
-// Zusage zu machen: es ist ein ausdrücklicher Einzelakt, er verlangt eine
-// Begründung, er landet unveränderlich im Protokoll — und der Besitzer sieht
-// ihn in seiner eigenen Oberfläche. Heimlich geht es in keiner Einstellung.
+// This answers the suspicion case without making "private" an empty promise:
+// one deliberate act, a mandatory reason, an immutable audit entry — and the
+// owner sees it in their own UI. In no configuration is it silent.
 func (s *Server) handleRevealPrivate(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
 	if s.cfg.AdminPrivateAccess == config.AdminPrivateNone {
@@ -196,8 +194,7 @@ func (s *Server) handleRevealPrivate(w http.ResponseWriter, r *http.Request) {
 		s.writeStoreError(w, r, err)
 		return
 	}
-	// Eigene und geteilte Einträge sind ohnehin sichtbar; dafür braucht es
-	// keinen Protokolleintrag.
+	// Own and shared prompts are visible anyway; no audit entry needed.
 	if prompt.Visibility != store.VisibilityPrivate || prompt.OwnerID == p.UserID {
 		writeJSON(w, http.StatusOK, toPromptJSON(prompt))
 		return
@@ -212,7 +209,6 @@ func (s *Server) handleRevealPrivate(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, toPromptJSON(prompt))
 }
 
-// handleMyAudit zeigt, was mit den eigenen Inhalten geschehen ist.
 func (s *Server) handleMyAudit(w http.ResponseWriter, r *http.Request) {
 	p := auth.FromContext(r.Context())
 	entries, err := s.store.ListAudit(r.Context(), p.UserID, 50, 0)

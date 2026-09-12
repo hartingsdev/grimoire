@@ -10,8 +10,8 @@ import (
 	"github.com/hartingsdev/solid-bassoon/internal/auth"
 )
 
-// CreateAPIKey erzeugt einen Key und speichert nur dessen Hash. Der Klartext
-// wird zurückgegeben, einmal angezeigt und danach nie wieder.
+// CreateAPIKey mints a key and stores only its hash. The plaintext is returned
+// once, shown once, and never again.
 func (s *Store) CreateAPIKey(ctx context.Context, instance, name string, role auth.Role,
 	ownerID string, expiresAt, now time.Time) (plaintext string, key APIKey, err error) {
 
@@ -32,8 +32,6 @@ func (s *Store) CreateAPIKey(ctx context.Context, instance, name string, role au
 	}, nil
 }
 
-// LookupAPIKey holt einen Key samt Besitzer. Der Aufrufer prüft danach
-// Geheimnis, Widerruf, Ablauf und die Rolle des Besitzers.
 func (s *Store) LookupAPIKey(ctx context.Context, id string) (APIKey, []byte, User, error) {
 	row := s.db.QueryRowContext(ctx, `SELECT k.id, k.key_hash, k.name, k.role, k.owner_id,
 		k.created_at, k.expires_at, k.last_used_at, k.revoked_at, k.revoked_reason,
@@ -78,9 +76,9 @@ func (s *Store) LookupAPIKey(ctx context.Context, id string) (APIKey, []byte, Us
 	return k, hash, owner, nil
 }
 
-// TouchAPIKey schreibt "zuletzt genutzt" fort — aber nur, wenn der Wert schon
-// älter als minInterval ist. Bei jedem Request zu schreiben wäre bei einem
-// Skript in der Schleife der teuerste Teil des ganzen Requests.
+// TouchAPIKey advances "last used", but only once the value is older than
+// minInterval. Writing it on every request would be the most expensive part of
+// an otherwise very cheap request.
 func (s *Store) TouchAPIKey(ctx context.Context, id string, now time.Time, minInterval time.Duration) error {
 	_, err := s.db.ExecContext(ctx,
 		`UPDATE api_keys SET last_used_at = ? WHERE id = ? AND last_used_at < ?`,
@@ -88,8 +86,8 @@ func (s *Store) TouchAPIKey(ctx context.Context, id string, now time.Time, minIn
 	return err
 }
 
-// ListAPIKeys liefert Metadaten — nie den Key selbst. ownerID leer bedeutet
-// "alle Keys" und ist Admins vorbehalten.
+// ListAPIKeys returns metadata, never the key itself. An empty ownerID means
+// "every key" and is reserved for admins.
 func (s *Store) ListAPIKeys(ctx context.Context, ownerID string, staleAfter time.Duration, now time.Time) ([]APIKey, error) {
 	q := `SELECT k.id, k.name, k.role, k.owner_id, k.created_at, k.expires_at,
 		k.last_used_at, k.revoked_at, k.revoked_reason,
@@ -134,12 +132,12 @@ func (s *Store) ListAPIKeys(ctx context.Context, ownerID string, staleAfter time
 	return out, rows.Err()
 }
 
-// EffectiveKeyRole berechnet, was ein Key gerade tatsächlich darf.
+// EffectiveKeyRole computes what a key may actually do right now.
 //
-// Die Regel ist min(Rolle des Keys, aktuelle Rolle des Besitzers) — ein Key kann
-// nie mehr als der Mensch, der ihn ausgestellt hat. Zusätzlich verfällt die
-// Wirkung, wenn der Besitzer zu lange nicht mehr verifiziert eingeloggt war:
-// sonst liefe der Key eines längst Ausgeschiedenen mit veralteter Rolle weiter.
+// The rule is min(key role, owner's current role): a key can never outrank the
+// person who issued it. It also lapses once the owner has not been verified for
+// too long, otherwise a departed colleague's key would keep running on a stale
+// role.
 func EffectiveKeyRole(k APIKey, ownerRole auth.Role, ownerRoleAt time.Time,
 	staleAfter time.Duration, now time.Time) auth.Role {
 
@@ -155,7 +153,6 @@ func EffectiveKeyRole(k APIKey, ownerRole auth.Role, ownerRoleAt time.Time,
 	return auth.MinRole(k.Role, ownerRole)
 }
 
-// RevokeAPIKey widerruft endgültig. ownerID leer bedeutet "Admin darf jeden Key".
 func (s *Store) RevokeAPIKey(ctx context.Context, id, ownerID, reason string, now time.Time) error {
 	q := `UPDATE api_keys SET revoked_at = ?, revoked_reason = ?
 		WHERE id = ? AND revoked_at IS NULL`

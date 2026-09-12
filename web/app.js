@@ -1,14 +1,14 @@
-// Oberfläche der Prompt-Bibliothek. Kein Framework, kein Übersetzungsschritt.
+// Promptory UI. No framework, no build step.
 //
-// Sie zeigt nur an, was der Server ohnehin erlaubt: /api/v1/me nennt Rolle und
-// Fähigkeiten, daran hängen die Schaltflächen. Die eigentliche Prüfung findet
-// im Server statt — hier geht es nur darum, niemanden in eine 403 laufen zu lassen.
+// It only offers what the server would allow anyway: /api/v1/me reports role
+// and capabilities, and the buttons follow. Enforcement happens in the server;
+// this is about not walking anyone into a 403.
 'use strict';
 
 let me = null;
 let state = { view: 'library', q: '', tags: new Set(), visibility: '' };
 
-// --- Kommunikation ---------------------------------------------------------
+// --- transport --------------------------------------------------------------
 
 async function api(method, path, body) {
   const opts = { method, headers: {}, credentials: 'same-origin' };
@@ -35,7 +35,7 @@ function can(capability) {
   return !!me && me.capabilities.includes(capability);
 }
 
-// --- Hilfen ----------------------------------------------------------------
+// --- helpers ----------------------------------------------------------------
 
 const $ = (id) => document.getElementById(id);
 
@@ -86,7 +86,7 @@ async function copyText(text) {
     await navigator.clipboard.writeText(text);
     toast('Kopiert.');
   } catch {
-    // Ohne sicheren Kontext (http) gibt es keine Zwischenablage-API.
+    // No clipboard API without a secure context (plain http).
     const area = el('textarea', { style: 'position:fixed;opacity:0' });
     area.value = text;
     document.body.append(area);
@@ -97,7 +97,7 @@ async function copyText(text) {
   }
 }
 
-// --- Bibliothek ------------------------------------------------------------
+// --- library ----------------------------------------------------------------
 
 async function loadLibrary() {
   const params = new URLSearchParams();
@@ -172,7 +172,7 @@ function promptCard(p) {
     el('div', { class: 'actions' }, actions));
 }
 
-// --- Eintrag anlegen/bearbeiten -------------------------------------------
+// --- create and edit ---------------------------------------------------------
 
 let editing = null;
 
@@ -185,7 +185,7 @@ function openPromptDialog(prompt) {
   $('pPrivate').checked = prompt ? prompt.visibility === 'private' : false;
   $('promptError').hidden = true;
 
-  // Der Sichtbarkeits-Schalter sagt die Wahrheit über diese Instanz.
+  // The visibility toggle tells the truth about this instance.
   const wrap = $('pPrivateWrap');
   wrap.hidden = !me.instance.privatePrompts;
   $('pPrivateNote').textContent = me.instance.privateVisibleToAdmins
@@ -207,7 +207,7 @@ async function savePrompt() {
   await loadLibrary();
 }
 
-// --- API-Keys --------------------------------------------------------------
+// --- API keys ---------------------------------------------------------------
 
 async function loadKeys() {
   const all = $('allKeys').checked ? '?all=1' : '';
@@ -258,7 +258,7 @@ async function createKey() {
   await loadKeys();
 }
 
-// --- Verwaltung ------------------------------------------------------------
+// --- administration ----------------------------------------------------------
 
 async function loadAdmin() {
   const [{ users }, { entries }] = await Promise.all([
@@ -326,7 +326,7 @@ async function deleteUser() {
   await loadAdmin();
 }
 
-// --- Ansichten -------------------------------------------------------------
+// --- views ------------------------------------------------------------------
 
 const loaders = { library: loadLibrary, keys: loadKeys, admin: loadAdmin };
 
@@ -346,7 +346,7 @@ function showError(err) {
   toast(err && err.message ? err.message : 'Unerwarteter Fehler.');
 }
 
-// --- Start -----------------------------------------------------------------
+// --- startup ----------------------------------------------------------------
 
 function wire() {
   for (const tab of document.querySelectorAll('.tab')) {

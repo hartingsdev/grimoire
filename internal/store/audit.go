@@ -6,7 +6,6 @@ import (
 	"time"
 )
 
-// Protokollierte Vorgänge.
 const (
 	ActionKeyCreated      = "key.created"
 	ActionKeyRevoked      = "key.revoked"
@@ -15,8 +14,8 @@ const (
 	ActionPrivateTransfer = "prompt.private_transferred"
 )
 
-// Audit hängt einen Eintrag an. Das Protokoll ist append-only: es gibt keinen
-// Pfad, der Einträge ändert oder löscht — auch das Löschen eines Nutzers nicht.
+// Audit appends an entry. The log is append-only: no code path edits or
+// deletes entries, not even deleting a user.
 func (s *Store) Audit(ctx context.Context, e AuditEntry) error {
 	if e.At.IsZero() {
 		e.At = time.Now()
@@ -32,9 +31,9 @@ func (s *Store) Audit(ctx context.Context, e AuditEntry) error {
 	return err
 }
 
-// ListAudit liefert das Protokoll, neueste zuerst. ownerID grenzt auf Vorgänge
-// ein, die Inhalte dieses Nutzers betreffen — damit sieht jeder in seiner
-// eigenen Oberfläche, wenn ein Admin einen seiner privaten Einträge freigeschaltet hat.
+// ListAudit returns the log, newest first. affectedOwnerID narrows it to
+// actions touching that user's content, so everyone can see in their own UI
+// when an admin revealed one of their private prompts.
 func (s *Store) ListAudit(ctx context.Context, affectedOwnerID string, limit, offset int) ([]AuditEntry, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 100

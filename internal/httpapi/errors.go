@@ -9,8 +9,8 @@ import (
 	"github.com/hartingsdev/solid-bassoon/internal/store"
 )
 
-// apiError ist die einheitliche Fehlerform der API. Skripte können sich auf
-// code verlassen, message ist für Menschen.
+// apiError is the API's single error shape: scripts rely on code, message is
+// for people.
 type apiError struct {
 	Code    string `json:"code"`
 	Message string `json:"message"`
@@ -35,9 +35,9 @@ func writeError(w http.ResponseWriter, status int, code, message string) {
 	writeJSON(w, status, errorBody{apiError{Code: code, Message: message}})
 }
 
-// writeStoreError übersetzt Fehler der Datenbankschicht. ErrNotFound wird auch
-// dann gemeldet, wenn ein Eintrag zwar existiert, aber für den Aufrufer nicht
-// sichtbar ist — sonst verriete die Antwort die Existenz fremder privater Einträge.
+// writeStoreError translates store errors. ErrNotFound also covers a prompt
+// that exists but is invisible to the caller, so the response cannot confirm
+// the existence of other people's private entries.
 func (s *Server) writeStoreError(w http.ResponseWriter, r *http.Request, err error) {
 	switch {
 	case errors.Is(err, store.ErrNotFound):

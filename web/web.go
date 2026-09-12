@@ -1,5 +1,5 @@
-// Package web enthält die eingebettete Oberfläche. Sie wird in die Binary
-// gebacken, damit ein Container aus genau einer Datei plus /data besteht.
+// Package web carries the embedded UI, baked into the binary so a container
+// is one file plus /data.
 package web
 
 import "embed"

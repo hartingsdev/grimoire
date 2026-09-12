@@ -1,4 +1,4 @@
-# REST-API der Prompt-Bibliothek
+# Promptory REST API
 
 Diese Datei ist als Referenz gedacht, die sich einem Skript oder einem
 Assistenten wie Claude Code direkt vorlegen lässt.
@@ -124,7 +124,7 @@ curl -s -H "Authorization: Bearer $PL_KEY" "$PL/api/v1/me"
   "capabilities": ["prompts:read"],
   "user": { "id": "…", "name": "Anna Beispiel", "email": "anna@example.org" },
   "key":  { "id": "9f3k2md7qa4x", "role": "viewer" },
-  "instance": { "title": "Prompt-Bibliothek (privat)", "name": "privat" }
+  "instance": { "title": "Promptory (privat)", "name": "privat" }
 }
 ```
 

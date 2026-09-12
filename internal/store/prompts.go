@@ -11,11 +11,11 @@ import (
 	"time"
 )
 
-// Scope beschreibt, was ein Betrachter sehen darf. Der Filter ist bewusst an
-// einer Stelle gebündelt: jede Abfrage auf prompts geht durch ihn hindurch.
+// Scope describes what a viewer may see. Deliberately in one place: every
+// query over prompts passes through it.
 //
-// Ein API-Key trägt die ViewerID seines Besitzers — dadurch sieht er exakt
-// dessen Bibliothek, ohne dass es dafür eine Sonderregel für Keys bräuchte.
+// An API key carries its owner's ViewerID and therefore sees exactly that
+// person's library, with no special rule for keys.
 type Scope struct {
 	ViewerID      string
 	SeeAllPrivate bool // nur für Admins, wenn ADMIN_PRIVATE_ACCESS=full
@@ -80,11 +80,11 @@ func displayName(name, email sql.NullString, deleted sql.NullInt64) string {
 	return TombstoneName
 }
 
-// ListPrompts sucht und filtert.
+// ListPrompts searches and filters.
 //
-// Die Suche kombiniert zwei Wege: FTS5 findet Wortanfänge und normalisiert
-// Diakritika ("ubersetz*" trifft "Übersetzung"), LIKE fängt die Teilwortsuche
-// mitten im Wort ab, die FTS5 nicht kann. FTS-Treffer stehen vorn.
+// Search combines two paths: FTS5 matches word prefixes and folds diacritics
+// ("ubersetz*" hits "Übersetzung"), while LIKE covers mid-word substrings that
+// FTS5 cannot. FTS matches rank first.
 func (s *Store) ListPrompts(ctx context.Context, sc Scope, opts ListOptions) ([]Prompt, error) {
 	if opts.Limit <= 0 || opts.Limit > 200 {
 		opts.Limit = 50
@@ -215,7 +215,6 @@ func (s *Store) loadTags(ctx context.Context, prompts []Prompt) error {
 	return rows.Err()
 }
 
-// CreatePrompt legt einen Eintrag an und schreibt gleich die erste Revision.
 func (s *Store) CreatePrompt(ctx context.Context, in Prompt, actorID string, now time.Time) (Prompt, error) {
 	in.ID = newID()
 	in.OwnerID, in.CreatedBy, in.UpdatedBy = actorID, actorID, actorID
@@ -242,8 +241,8 @@ func (s *Store) CreatePrompt(ctx context.Context, in Prompt, actorID string, now
 	return in, err
 }
 
-// UpdatePrompt ändert Titel, Text, Sichtbarkeit und Tags und legt die neue
-// Fassung als Revision ab.
+// UpdatePrompt changes title, body, visibility and tags, recording the new
+// state as a revision.
 func (s *Store) UpdatePrompt(ctx context.Context, sc Scope, id string, in Prompt, actorID string, now time.Time) (Prompt, error) {
 	var out Prompt
 	err := s.tx(ctx, func(tx *sql.Tx) error {
@@ -297,8 +296,8 @@ func (s *Store) UpdatePrompt(ctx context.Context, sc Scope, id string, in Prompt
 	return out, err
 }
 
-// DeletePrompt löscht weich: der Eintrag verschwindet aus allen Listen und aus
-// dem Suchindex, bleibt aber wiederherstellbar.
+// DeletePrompt is a soft delete: gone from listings and the search index, but
+// still restorable.
 func (s *Store) DeletePrompt(ctx context.Context, sc Scope, id, actorID string, now time.Time) error {
 	return s.tx(ctx, func(tx *sql.Tx) error {
 		clause, args := sc.clause("p")
@@ -327,8 +326,7 @@ func (s *Store) DeletePrompt(ctx context.Context, sc Scope, id, actorID string, 
 	})
 }
 
-// RestorePrompt holt einen gelöschten Eintrag zurück, optional auf dem Stand
-// einer bestimmten Revision.
+// RestorePrompt brings a deleted prompt back, optionally at a given revision.
 func (s *Store) RestorePrompt(ctx context.Context, sc Scope, id string, revision int, actorID string, now time.Time) (Prompt, error) {
 	var out Prompt
 	err := s.tx(ctx, func(tx *sql.Tx) error {
@@ -425,8 +423,6 @@ func (s *Store) ListRevisions(ctx context.Context, sc Scope, id string) ([]Revis
 	return out, rows.Err()
 }
 
-// ListTags liefert alle Tags, die in für den Betrachter sichtbaren Einträgen
-// vorkommen, mit Häufigkeit.
 func (s *Store) ListTags(ctx context.Context, sc Scope) ([]TagCount, error) {
 	clause, args := sc.clause("p")
 	rows, err := s.db.QueryContext(ctx, `SELECT t.name, COUNT(*) FROM tags t
@@ -472,7 +468,6 @@ func currentTags(ctx context.Context, tx *sql.Tx, promptID string) ([]string, er
 	return out, rows.Err()
 }
 
-// setTags ersetzt die Tags eines Eintrags und gibt die normalisierte Liste zurück.
 func setTags(ctx context.Context, tx *sql.Tx, promptID string, tags []string) ([]string, error) {
 	seen := map[string]bool{}
 	clean := make([]string, 0, len(tags))
@@ -505,7 +500,7 @@ func setTags(ctx context.Context, tx *sql.Tx, promptID string, tags []string) ([
 			return nil, err
 		}
 	}
-	// Verwaiste Tags aufräumen, damit die Tag-Liste nicht zumüllt.
+	// Drop orphaned tags so the tag list does not silt up.
 	if _, err := tx.ExecContext(ctx, `DELETE FROM tags WHERE id NOT IN
 		(SELECT tag_id FROM prompt_tags)`); err != nil {
 		return nil, err
@@ -513,8 +508,8 @@ func setTags(ctx context.Context, tx *sql.Tx, promptID string, tags []string) ([
 	return clean, nil
 }
 
-// syncSearch hält die Suchquelle aktuell; die Trigger auf prompt_search
-// aktualisieren daraufhin den FTS5-Index.
+// syncSearch updates the search source; triggers on prompt_search then update
+// the FTS5 index, so no code path can forget it.
 func syncSearch(ctx context.Context, tx *sql.Tx, promptID, title, body string, tags []string) error {
 	_, err := tx.ExecContext(ctx, `INSERT INTO prompt_search(prompt_id, title, body, tags)
 		VALUES (?,?,?,?) ON CONFLICT(prompt_id) DO UPDATE
@@ -536,8 +531,8 @@ func appendRevision(ctx context.Context, tx *sql.Tx, p Prompt, kind, actorID str
 	return err
 }
 
-// ftsQuery baut aus einer Nutzereingabe eine FTS5-Abfrage. Jedes Wort wird
-// gequotet (damit Sonderzeichen keine Syntax sind) und als Präfix gesucht.
+// ftsQuery turns user input into an FTS5 query: every word quoted, so special
+// characters are not syntax, and matched as a prefix.
 func ftsQuery(q string) string {
 	var parts []string
 	for _, field := range strings.Fields(q) {

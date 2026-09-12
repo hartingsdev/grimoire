@@ -49,12 +49,12 @@ func toPromptJSON(p store.Prompt) promptJSON {
 	}
 }
 
-// scope bestimmt, welche Einträge ein Principal sehen darf.
+// scope decides which prompts a principal may see.
 //
-// Ein API-Key trägt die Nutzer-ID seines Besitzers und bekommt dadurch genau
-// dessen Sicht — ohne Sonderregel. Fremde private Einträge sieht nur ein
-// angemeldeter Admin, und nur wenn die Instanz auf ADMIN_PRIVATE_ACCESS=full
-// steht; break-glass läuft über den ausdrücklichen, protokollierten Einzelabruf.
+// An API key carries its owner's user id and so inherits exactly their view,
+// with no special rule. Other people's private prompts are visible only to a
+// signed-in admin, and only under ADMIN_PRIVATE_ACCESS=full; break-glass goes
+// through the deliberate, audited single reveal.
 func (s *Server) scope(p *auth.Principal) store.Scope {
 	return store.Scope{
 		ViewerID: p.UserID,
@@ -84,8 +84,7 @@ func (s *Server) handleListPrompts(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// Grenzen wie in der Datenbankschicht normalisieren, damit die Antwort die
-	// tatsächlich verwendeten Werte nennt.
+	// Normalize like the store does, so the response reports the values used.
 	if opts.Limit <= 0 || opts.Limit > 200 {
 		opts.Limit = 50
 	}
@@ -261,7 +260,6 @@ func (s *Server) handleListTags(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"tags": out})
 }
 
-// validatePrompt prüft Grenzen und die Instanz-Richtlinie zu privaten Einträgen.
 func (s *Server) validatePrompt(p store.Prompt) (string, bool) {
 	if len(p.Title) > maxTitleLength {
 		return "title ist zu lang (höchstens " + strconv.Itoa(maxTitleLength) + " Zeichen).", false

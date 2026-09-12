@@ -21,13 +21,11 @@ import (
 const (
 	sessionCookie = "pl_session"
 	csrfHeader    = "X-CSRF-Token"
-	// Wie lange "zuletzt genutzt" eines Keys stehen bleiben darf, bevor es neu
-	// geschrieben wird. Bei jedem Request zu schreiben wäre der teuerste Teil
-	// eines ansonsten sehr billigen Requests.
+	// How stale a key's "last used" may get before it is rewritten. Writing it
+	// on every request would be the most expensive part of a cheap request.
 	keyTouchInterval = 5 * time.Minute
 )
 
-// guard setzt den deklarierten Schutz einer Route durch.
 func (s *Server) guard(route Route, h http.HandlerFunc) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		principal, ok := s.authenticate(w, r)
@@ -51,8 +49,8 @@ func (s *Server) guard(route Route, h http.HandlerFunc) http.Handler {
 			s.denied(w, principal, route)
 			return
 		}
-		// Cookie-Sitzungen brauchen bei schreibenden Zugriffen zusätzlich einen
-		// CSRF-Token; Bearer-Aufrufe nicht, da sie keine Cookies mitschicken.
+		// Cookie sessions need a CSRF token for writes; bearer calls do not,
+		// since they carry no cookies.
 		if principal.Kind == auth.KindSession && !safeMethod(r.Method) {
 			if r.Header.Get(csrfHeader) != principal.CSRFToken {
 				writeError(w, http.StatusForbidden, "csrf",
@@ -64,7 +62,6 @@ func (s *Server) guard(route Route, h http.HandlerFunc) http.Handler {
 	})
 }
 
-// denied formuliert die Ablehnung so, dass der Aufrufer den Grund erkennt.
 func (s *Server) denied(w http.ResponseWriter, p *auth.Principal, route Route) {
 	if p.Kind == auth.KindAPIKey {
 		for _, managed := range auth.ManagementCapabilities {
@@ -87,9 +84,8 @@ func safeMethod(m string) bool {
 	return m == http.MethodGet || m == http.MethodHead || m == http.MethodOptions
 }
 
-// authenticate ermittelt den Principal. Ein fehlender Nachweis ist kein Fehler —
-// darüber entscheidet guard anhand der Route. Liefert ok=false, wurde bereits
-// geantwortet (etwa beim Rate-Limit).
+// authenticate resolves the principal. A missing credential is not an error —
+// guard decides that per route. ok=false means a response was already written.
 func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) (*auth.Principal, bool) {
 	if header := r.Header.Get("Authorization"); header != "" {
 		return s.authenticateAPIKey(w, r, header)
@@ -100,8 +96,8 @@ func (s *Server) authenticate(w http.ResponseWriter, r *http.Request) (*auth.Pri
 	return nil, true
 }
 
-// authenticateAPIKey arbeitet die acht Prüfschritte ab. Jeder bricht ab, und
-// keiner verrät dem Aufrufer mehr als nötig.
+// authenticateAPIKey walks the eight checks. Each one bails out, and none
+// tells the caller more than it must.
 func (s *Server) authenticateAPIKey(w http.ResponseWriter, r *http.Request, header string) (*auth.Principal, bool) {
 	raw, ok := strings.CutPrefix(header, "Bearer ")
 	if !ok {
@@ -109,14 +105,14 @@ func (s *Server) authenticateAPIKey(w http.ResponseWriter, r *http.Request, head
 			"Erwartet wird: Authorization: Bearer <key>")
 		return nil, false
 	}
-	// 1+2: Präfix und Instanz prüfen, noch ohne Datenbankzugriff.
+	// 1+2: prefix and instance, still without touching the database.
 	id, secret, err := auth.ParseKey(s.cfg.AppInstance, strings.TrimSpace(raw))
 	if err != nil {
 		writeError(w, http.StatusUnauthorized, "invalid_key",
 			"Der Key ist ungültig oder gehört zu einer anderen Instanz.")
 		return nil, false
 	}
-	// 3: Nachschlagen über den Index.
+	// 3: index lookup.
 	key, hash, owner, err := s.store.LookupAPIKey(r.Context(), id)
 	if err != nil {
 		if !errors.Is(err, store.ErrNotFound) {
@@ -125,13 +121,13 @@ func (s *Server) authenticateAPIKey(w http.ResponseWriter, r *http.Request, head
 		writeError(w, http.StatusUnauthorized, "invalid_key", "Der Key ist ungültig.")
 		return nil, false
 	}
-	// 4: Geheimnis in konstanter Zeit vergleichen.
+	// 4: compare the secret in constant time.
 	if !auth.SecretMatches(secret, hash) {
 		writeError(w, http.StatusUnauthorized, "invalid_key", "Der Key ist ungültig.")
 		return nil, false
 	}
 	now := time.Now()
-	// 5: Widerruf und Ablauf.
+	// 5: revocation and expiry.
 	if key.Revoked() {
 		writeError(w, http.StatusUnauthorized, "key_revoked", "Dieser Key wurde widerrufen.")
 		return nil, false
@@ -140,7 +136,7 @@ func (s *Server) authenticateAPIKey(w http.ResponseWriter, r *http.Request, head
 		writeError(w, http.StatusUnauthorized, "key_expired", "Dieser Key ist abgelaufen.")
 		return nil, false
 	}
-	// 6: Rate-Limit pro Key.
+	// 6: per-key rate limit.
 	res := s.limiter.Allow(key.ID, now)
 	setRateLimitHeaders(w, res)
 	if !res.Allowed {
@@ -149,7 +145,7 @@ func (s *Server) authenticateAPIKey(w http.ResponseWriter, r *http.Request, head
 			"Zu viele Anfragen. Die RateLimit-Header nennen das erlaubte Tempo.")
 		return nil, false
 	}
-	// 7: min(Rolle des Keys, aktuelle Rolle des Besitzers), inklusive Veralterung.
+	// 7: min(key role, owner's current role), staleness included.
 	effective := store.EffectiveKeyRole(key, owner.CachedRole, owner.CachedRoleAt,
 		s.cfg.OwnerStaleAfter, now)
 	if !effective.Valid() || owner.Deleted() {
@@ -160,7 +156,7 @@ func (s *Server) authenticateAPIKey(w http.ResponseWriter, r *http.Request, head
 	if err := s.store.TouchAPIKey(r.Context(), key.ID, now, keyTouchInterval); err != nil {
 		s.log.Warn("zuletzt-genutzt konnte nicht geschrieben werden", "key", auth.MaskKeyID(key.ID), "fehler", err)
 	}
-	// 8: Principal — ab hier kennt kein Handler mehr den Unterschied zur Sitzung.
+	// 8: principal — past here no handler tells a key from a session.
 	return &auth.Principal{
 		Kind: auth.KindAPIKey, UserID: owner.ID, Subject: owner.Sub,
 		Email: owner.Email, DisplayName: owner.Name(),
@@ -168,8 +164,8 @@ func (s *Server) authenticateAPIKey(w http.ResponseWriter, r *http.Request, head
 	}, true
 }
 
-// authenticateSession löst eine Browser-Sitzung auf und fragt dabei fällig
-// gewordene Rollen beim Provider neu ab.
+// authenticateSession resolves a browser session, re-checking the role with
+// the provider when revalidation falls due.
 func (s *Server) authenticateSession(w http.ResponseWriter, r *http.Request, id string) *auth.Principal {
 	ctx := r.Context()
 	now := time.Now()
@@ -203,12 +199,11 @@ func (s *Server) authenticateSession(w http.ResponseWriter, r *http.Request, id 
 	}
 }
 
-// revalidate fragt den Provider, ob die Rolle noch gilt.
+// revalidate asks the provider whether the role still holds.
 //
-// Entscheidend ist die Unterscheidung der Fehlerfälle: ein nicht erreichbarer
-// Provider ist keine Auskunft und darf niemandem etwas wegnehmen, sonst würde
-// ein kurzer Ausfall des IdP alle Sitzungen beenden. Nur eine echte Antwort
-// ohne passende Rolle beendet die Sitzung.
+// Telling the failure modes apart is the whole point: an unreachable provider
+// is not an answer and must take nothing away, or a brief IdP outage would end
+// every session. Only a real response without a matching role ends one.
 func (s *Server) revalidate(ctx context.Context, sess store.Session, user store.User, now time.Time) (auth.Role, bool) {
 	client, err := s.provider.Client()
 	if err != nil {
@@ -236,7 +231,7 @@ func (s *Server) revalidate(ctx context.Context, sess store.Session, user store.
 		return sess.Role, true
 	}
 
-	// Ab hier ist die Auskunft autoritativ.
+	// From here the answer is authoritative.
 	if err := s.store.SetCachedRole(ctx, user.ID, identity.Role, now); err != nil {
 		s.log.Error("Rollen-Cache nicht geschrieben", "fehler", err)
 	}
@@ -253,8 +248,8 @@ func (s *Server) revalidate(ctx context.Context, sess store.Session, user store.
 	return identity.Role, true
 }
 
-// deferRevalidation verschiebt den nächsten Versuch um eine Minute, damit ein
-// ausgefallener Provider nicht bei jedem Request neu angefragt wird.
+// deferRevalidation pushes the next attempt out a minute, so a provider that
+// is down is not re-asked on every request.
 func (s *Server) deferRevalidation(ctx context.Context, sess store.Session, now time.Time) {
 	_ = s.store.UpdateSessionAfterRevalidation(ctx, sess.ID, sess.Role,
 		sess.AccessToken, sess.RefreshToken, sess.TokenExpiry, now.Add(time.Minute))
@@ -276,8 +271,6 @@ func (s *Server) clearSessionCookie(w http.ResponseWriter) {
 	})
 }
 
-// setRateLimitHeaders gibt aufrufenden Skripten die Werte, mit denen sie sich
-// selbst bremsen können, statt in 429er zu laufen.
 func setRateLimitHeaders(w http.ResponseWriter, res ratelimit.Result) {
 	h := w.Header()
 	h.Set("RateLimit-Limit", strconv.Itoa(res.Limit))
@@ -285,8 +278,7 @@ func setRateLimitHeaders(w http.ResponseWriter, res ratelimit.Result) {
 	h.Set("RateLimit-Reset", strconv.Itoa(int(time.Until(res.Reset).Seconds()+0.5)))
 }
 
-// withSecurityHeaders setzt Kopfzeilen, die für eine Anwendung ohne externe
-// Einbindungen gefahrlos streng sein können.
+// withSecurityHeaders can afford to be strict: the app embeds nothing external.
 func (s *Server) withSecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		h := w.Header()
@@ -310,8 +302,8 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-// withLogging protokolliert jeden Request. Der Authorization-Header wird
-// grundsätzlich nicht ausgegeben — ein Key darf nie in einem Log landen.
+// withLogging logs every request. The Authorization header is never emitted:
+// a key must not end up in a log.
 func (s *Server) withLogging(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
@@ -345,9 +337,8 @@ func (s *Server) withRecovery(next http.Handler) http.Handler {
 	})
 }
 
-// clientIP wertet X-Forwarded-For nur aus, wenn der unmittelbare Absender ein
-// als vertrauenswürdig konfigurierter Proxy ist. Sonst könnte jeder Aufrufer
-// seine Herkunft frei behaupten.
+// clientIP honours X-Forwarded-For only from a configured trusted proxy;
+// otherwise any caller could claim any origin.
 func (s *Server) clientIP(r *http.Request) string {
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {

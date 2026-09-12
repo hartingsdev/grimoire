@@ -6,18 +6,16 @@ import (
 	"strings"
 )
 
-// handleStatic liefert die Oberfläche aus. Sie wird per go:embed in die Binary
-// gebacken; STATIC_DIR überschreibt das für die Entwicklung.
-//
-// Die Oberfläche erfährt Titel, Rolle und Richtlinien der Instanz über
-// /api/v1/me — deshalb braucht es hier keine Templates.
+// handleStatic serves the UI, embedded in the binary and overridable via
+// STATIC_DIR while developing. The UI learns title, role and instance policy
+// from /api/v1/me, so no templating is needed here.
 func (s *Server) handleStatic(w http.ResponseWriter, r *http.Request) {
 	path := strings.TrimPrefix(r.URL.Path, "/")
 	if path == "" {
 		path = "index.html"
 	}
-	// Unbekannte Pfade führen zur Oberfläche zurück, API-Pfade nicht: dort wäre
-	// eine HTML-Antwort auf einen JSON-Aufruf irreführend.
+	// Unknown paths fall back to the UI, API paths do not: answering a JSON
+	// call with HTML would be misleading.
 	if _, err := fs.Stat(s.static, path); err != nil {
 		if strings.HasPrefix(r.URL.Path, "/api/") || strings.HasPrefix(r.URL.Path, "/auth/") {
 			writeError(w, http.StatusNotFound, "not_found", "Unbekannter Endpunkt.")

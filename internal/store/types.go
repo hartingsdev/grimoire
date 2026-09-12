@@ -8,8 +8,8 @@ import (
 	"github.com/hartingsdev/solid-bassoon/internal/auth"
 )
 
-// TombstoneName steht in der Oberfläche, wo ein gelöschter Nutzer als Autor
-// auftaucht. Die Zeile bleibt erhalten, damit die Historie nicht zerreißt.
+// TombstoneName stands in wherever a deleted user appears as an author. The
+// row survives so history does not tear.
 const TombstoneName = "Gelöschter Nutzer"
 
 type User struct {
@@ -26,7 +26,6 @@ type User struct {
 
 func (u User) Deleted() bool { return !u.DeletedAt.IsZero() }
 
-// Name liefert die Anzeige für Autorenfelder.
 func (u User) Name() string {
 	switch {
 	case u.Deleted():
@@ -86,9 +85,8 @@ type APIKey struct {
 	RevokedAt     time.Time
 	RevokedReason string
 
-	// EffectiveRole ist min(Rolle des Keys, aktuelle Rolle des Besitzers).
-	// Steht hier RoleNone, obwohl der Key nicht widerrufen ist, hat der
-	// Besitzer seinen Zugang verloren — der Key ist inaktiv, aber nicht tot.
+	// EffectiveRole is min(key role, owner's current role). RoleNone on a key
+	// that is not revoked means the owner lost access: inactive, not dead.
 	EffectiveRole auth.Role
 }
 
@@ -123,9 +121,9 @@ type AuditEntry struct {
 	DetailJSON string
 }
 
-// newID erzeugt eine UUIDv7: zeitlich sortierbar, damit Einfügungen in SQLite
-// am Index-Ende landen, und gleichzeitig kollisionsfrei über Instanzgrenzen —
-// damit lassen sich Prompts zwischen privat und arbeit exportieren.
+// newID builds a UUIDv7: time-sortable, so inserts land at the end of the
+// index, and collision-free across instances, so prompts can be exported from
+// one instance into another.
 func newID() string {
 	var b [16]byte
 	if _, err := rand.Read(b[:]); err != nil {
@@ -145,7 +143,6 @@ func newID() string {
 		hex.EncodeToString(b[10:16])
 }
 
-// NewToken erzeugt einen opaken Zufallswert für Sessions und CSRF-Token.
 func NewToken() string {
 	var b [32]byte
 	if _, err := rand.Read(b[:]); err != nil {

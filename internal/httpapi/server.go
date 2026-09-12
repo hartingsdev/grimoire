@@ -1,6 +1,5 @@
-// Package httpapi verbindet Oberfläche und REST-API. Beide laufen über dieselben
-// Endpunkte und dieselbe Rechteprüfung; der einzige Unterschied ist, wie sich
-// der Aufrufer ausweist.
+// Package httpapi serves the UI and the REST API over the same endpoints and
+// the same permission check. The only difference is how a caller identifies.
 package httpapi
 
 import (
@@ -17,8 +16,8 @@ import (
 	"github.com/hartingsdev/solid-bassoon/internal/store"
 )
 
-// Access beschreibt, wie eine Route abgesichert ist. Es gibt keinen vierten
-// Wert und keine Route ohne Angabe — siehe register().
+// Access says how a route is protected. There is no fourth value and no route
+// without one — see register().
 type Access int
 
 const (
@@ -27,8 +26,7 @@ const (
 	AccessCapability
 )
 
-// Route ist der deklarierte Schutz eines Endpunkts. Die Liste ist der
-// Prüfgegenstand von routes_test.go.
+// Route is an endpoint's declared protection. routes_test.go checks this table.
 type Route struct {
 	Method  string
 	Pattern string
@@ -63,23 +61,20 @@ func New(cfg *config.Config, st *store.Store, provider *auth.Provider,
 	return s, nil
 }
 
-// Routes gibt die Routentabelle für Tests frei.
 func (s *Server) Routes() []Route { return s.routes }
 
 func (s *Server) registerRoutes() {
-	// Betrieb
 	s.public("GET", "/healthz", s.handleHealthz)
 	s.public("GET", "/readyz", s.handleReadyz)
 
-	// Anmeldung
 	s.public("GET", "/auth/login", s.handleLogin)
 	s.public("GET", "/auth/callback", s.handleCallback)
 	s.authenticated("POST", "/auth/logout", s.handleLogout)
 
-	// Wer bin ich — jeder Angemeldete, auch ein API-Key.
+	// Identity, for anyone authenticated including an API key.
 	s.authenticated("GET", "/api/v1/me", s.handleMe)
 
-	// Prompts: identisch für Oberfläche und API.
+	// Prompts: identical for the UI and the API.
 	s.capability("GET", "/api/v1/prompts", auth.CapPromptsRead, s.handleListPrompts)
 	s.capability("POST", "/api/v1/prompts", auth.CapPromptsWrite, s.handleCreatePrompt)
 	s.capability("GET", "/api/v1/prompts/{id}", auth.CapPromptsRead, s.handleGetPrompt)
@@ -90,7 +85,7 @@ func (s *Server) registerRoutes() {
 	s.capability("POST", "/api/v1/prompts/{id}/restore", auth.CapPromptsWrite, s.handleRestorePrompt)
 	s.capability("GET", "/api/v1/tags", auth.CapPromptsRead, s.handleListTags)
 
-	// Verwaltung. Diese Rechte erreicht ein API-Key nie — siehe auth.Capabilities.
+	// Management. An API key never reaches these — see auth.Capabilities.
 	s.capability("GET", "/api/v1/api-keys", auth.CapKeysManage, s.handleListKeys)
 	s.capability("POST", "/api/v1/api-keys", auth.CapKeysManage, s.handleCreateKey)
 	s.capability("DELETE", "/api/v1/api-keys/{id}", auth.CapKeysManage, s.handleRevokeKey)
@@ -100,17 +95,15 @@ func (s *Server) registerRoutes() {
 	s.capability("GET", "/api/v1/admin/audit", auth.CapAuditRead, s.handleListAudit)
 	s.capability("POST", "/api/v1/admin/prompts/{id}/reveal", auth.CapAdminRead, s.handleRevealPrivate)
 
-	// Jede und jeder sieht das eigene Protokoll — insbesondere, wenn ein Admin
-	// einen privaten Eintrag freigeschaltet hat.
+	// Everyone can see their own audit trail, above all a revealed private prompt.
 	s.authenticated("GET", "/api/v1/me/audit", s.handleMyAudit)
 
-	// Oberfläche
 	s.public("GET", "/", s.handleStatic)
 }
 
-// register ist der einzige Weg, eine Route einzutragen — und verlangt dabei
-// immer eine Aussage über ihren Schutz. Eine vergessene Absicherung ist damit
-// kein stiller Mangel, sondern ein Übersetzungsfehler.
+// register is the only way to add a route, and it always demands a statement
+// about protection. A forgotten guard is therefore a compile error, not a
+// silent hole.
 func (s *Server) register(method, pattern string, access Access, cap auth.Capability, h http.HandlerFunc) {
 	s.routes = append(s.routes, Route{Method: method, Pattern: pattern, Access: access, Cap: cap})
 	s.mux.Handle(method+" "+pattern, s.guard(Route{
@@ -129,8 +122,8 @@ func (s *Server) capability(method, pattern string, cap auth.Capability, h http.
 	s.register(method, pattern, AccessCapability, cap, h)
 }
 
-// verifyRoutes läuft beim Start. Eine Route, die eine Fähigkeit verlangt, aber
-// keine nennt, lässt den Prozess gar nicht erst hochkommen.
+// verifyRoutes runs at startup: a route that requires a capability but names
+// none keeps the process from coming up at all.
 func (s *Server) verifyRoutes() error {
 	seen := map[string]bool{}
 	for _, r := range s.routes {
@@ -153,8 +146,8 @@ func (s *Server) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	s.withRecovery(s.withLogging(s.withSecurityHeaders(s.mux))).ServeHTTP(w, r)
 }
 
-// Background erledigt das periodische Aufräumen: abgelaufene Sitzungen und
-// Login-Vorgänge aus der Datenbank, unbenutzte Rate-Limit-Eimer aus dem Speicher.
+// Background does the periodic housekeeping: expired sessions and login states
+// out of the database, idle rate-limit buckets out of memory.
 func (s *Server) Background(ctx context.Context, now time.Time) {
 	if err := s.store.Cleanup(ctx); err != nil {
 		s.log.Warn("Aufräumen fehlgeschlagen", "fehler", err)
@@ -166,8 +159,8 @@ func (s *Server) handleHealthz(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]string{"status": "ok"})
 }
 
-// handleReadyz meldet erst "bereit", wenn der OIDC-Provider erreichbar war —
-// ohne ihn kann sich niemand anmelden.
+// handleReadyz reports ready only once the OIDC provider has been reached —
+// without it nobody can sign in.
 func (s *Server) handleReadyz(w http.ResponseWriter, r *http.Request) {
 	if !s.provider.Ready() {
 		writeError(w, http.StatusServiceUnavailable, "provider_unavailable",

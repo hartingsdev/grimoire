@@ -1,5 +1,5 @@
-// Package store kapselt die SQLite-Datei einer Instanz: Schema, Migrationen
-// und sämtliche Abfragen. Außerhalb dieses Pakets wird kein SQL geschrieben.
+// Package store owns one instance's SQLite file: schema, migrations and every
+// query. No SQL is written outside this package.
 package store
 
 import (
@@ -24,11 +24,11 @@ type Store struct {
 	aead cipher.AEAD // verschlüsselt die in sessions abgelegten Provider-Tokens
 }
 
-// Open öffnet die Datenbankdatei und bringt das Schema auf den aktuellen Stand.
+// Open opens the database file and brings the schema up to date.
 //
-// Der Verbindungspool ist bewusst auf eine Verbindung begrenzt: eine SQLite-Datei
-// verträgt ohnehin nur einen Schreiber, und bei der Last einer Prompt-Bibliothek
-// kostet die Serialisierung nichts — dafür gibt es niemals "database is locked".
+// The pool is capped at one connection on purpose: a SQLite file tolerates one
+// writer anyway, and at this load serializing costs nothing while ruling out
+// "database is locked" entirely.
 func Open(path string, encryptionKey []byte) (*Store, error) {
 	dsn := fmt.Sprintf("file:%s?_pragma=busy_timeout(5000)&_pragma=journal_mode(WAL)"+
 		"&_pragma=foreign_keys(1)&_pragma=synchronous(NORMAL)", url.PathEscape(path))
@@ -58,11 +58,10 @@ func Open(path string, encryptionKey []byte) (*Store, error) {
 
 func (s *Store) Close() error { return s.db.Close() }
 
-// DB gibt das Handle für Tests frei.
 func (s *Store) DB() *sql.DB { return s.db }
 
-// migrate wendet alle noch nicht angewandten Migrationen an. Der Fortschritt
-// steht in PRAGMA user_version — kein Migrations-Framework, keine Zusatztabelle.
+// migrate applies pending migrations, tracking progress in PRAGMA user_version
+// — no migration framework, no extra table.
 func (s *Store) migrate() error {
 	entries, err := migrationFS.ReadDir("migrations")
 	if err != nil {
@@ -95,7 +94,7 @@ func (s *Store) migrate() error {
 			tx.Rollback()
 			return fmt.Errorf("Migration %s: %w", name, err)
 		}
-		// PRAGMA user_version verträgt keine Platzhalter.
+		// PRAGMA user_version does not accept placeholders.
 		if _, err := tx.Exec(fmt.Sprintf("PRAGMA user_version = %d", step)); err != nil {
 			tx.Rollback()
 			return fmt.Errorf("Migration %s, Version setzen: %w", name, err)
@@ -107,7 +106,6 @@ func (s *Store) migrate() error {
 	return nil
 }
 
-// tx führt fn in einer Transaktion aus und rollt bei Fehler oder Panic zurück.
 func (s *Store) tx(ctx context.Context, fn func(*sql.Tx) error) error {
 	t, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -126,8 +124,8 @@ func (s *Store) tx(ctx context.Context, fn func(*sql.Tx) error) error {
 	return t.Commit()
 }
 
-// Cleanup entfernt abgelaufene Sessions und Login-States. Läuft periodisch im
-// Hintergrund; nichts davon ist für die Korrektheit nötig, nur fürs Aufräumen.
+// Cleanup removes expired sessions and login states. Housekeeping only;
+// correctness never depends on it.
 func (s *Store) Cleanup(ctx context.Context) error {
 	now := time.Now().Unix()
 	for _, q := range []string{
@@ -141,7 +139,6 @@ func (s *Store) Cleanup(ctx context.Context) error {
 	return nil
 }
 
-// nullString bildet leere Strings auf NULL ab.
 func nullString(s string) any {
 	if s == "" {
 		return nil
@@ -149,7 +146,6 @@ func nullString(s string) any {
 	return s
 }
 
-// nullTime bildet die Nullzeit auf NULL ab.
 func nullTime(t time.Time) any {
 	if t.IsZero() {
 		return nil
@@ -157,7 +153,6 @@ func nullTime(t time.Time) any {
 	return t.Unix()
 }
 
-// nullTimeZero bildet die Nullzeit auf 0 ab (Spalte ist NOT NULL DEFAULT 0).
 func nullTimeZero(t time.Time) int64 {
 	if t.IsZero() {
 		return 0
@@ -172,7 +167,6 @@ func unix(t sql.NullInt64) time.Time {
 	return time.Unix(t.Int64, 0)
 }
 
-// placeholders liefert "?,?,?" für IN-Klauseln.
 func placeholders(n int) string {
 	return strings.TrimSuffix(strings.Repeat("?,", n), ",")
 }

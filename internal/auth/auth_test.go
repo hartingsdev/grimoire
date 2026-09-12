@@ -6,9 +6,8 @@ import (
 	"time"
 )
 
-// Die tragende Invariante des Rechtemodells: ein API-Key erhält niemals ein
-// Verwaltungsrecht — auch dann nicht, wenn in seiner Datenbankzeile 'admin'
-// stünde, was die Erstellung gar nicht zulässt.
+// The load-bearing invariant: an API key never receives a management
+// capability, not even with role='admin' in its row (which creation rejects).
 func TestAPIKeyNeverGetsManagementCapabilities(t *testing.T) {
 	for _, role := range []Role{RoleViewer, RoleEditor, RoleAdmin} {
 		p := Principal{Kind: KindAPIKey, Role: role}
@@ -81,8 +80,8 @@ func TestKeyRoundTrip(t *testing.T) {
 	}
 }
 
-// Das base64url-Alphabet enthält Unterstriche. Ein Parser, der am Unterstrich
-// zerlegt, verwirft dadurch jeden zweiten erzeugten Key.
+// The base64url alphabet contains underscores. A parser that splits on every
+// underscore throws away roughly every other key it mints.
 func TestKeyWithUnderscoreInSecret(t *testing.T) {
 	for i := 0; i < 200; i++ {
 		plaintext, id, hash, err := NewKey("privat")
@@ -99,7 +98,7 @@ func TestKeyWithUnderscoreInSecret(t *testing.T) {
 	}
 }
 
-// Ein Key der anderen Instanz wird abgewiesen, bevor die Datenbank angefasst wird.
+// A key from another instance is rejected before any database access.
 func TestKeyRejectsForeignInstance(t *testing.T) {
 	plaintext, _, _, err := NewKey("arbeit")
 	if err != nil {
@@ -137,8 +136,8 @@ func TestRoleMapper(t *testing.T) {
 	}{
 		{"Gruppen-Array, höchste gewinnt", "groups", "pl-viewer:viewer,pl-admin:admin",
 			`{"groups":["pl-viewer","pl-admin","unbeteiligt"]}`, RoleAdmin},
-		{"eigener Claim ohne Mapping", "prompt_library_role", "",
-			`{"prompt_library_role":"editor"}`, RoleEditor},
+		{"eigener Claim ohne Mapping", "promptory_role", "",
+			`{"promptory_role":"editor"}`, RoleEditor},
 		{"Keycloak, verschachtelt", "resource_access.prompt-lib.roles", "",
 			`{"resource_access":{"prompt-lib":{"roles":["viewer"]}}}`, RoleViewer},
 		{"kein Treffer", "groups", "pl-editor:editor",

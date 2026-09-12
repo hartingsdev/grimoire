@@ -1,4 +1,4 @@
-# Betrieb
+# Betrieb (Promptory)
 
 Was du auf deinem Server einrichten musst, was in Authentik einzutragen ist und
 wie du beides vorher lokal durchtestest.
@@ -17,7 +17,7 @@ wie du beides vorher lokal durchtestest.
 ### 1.2 Konfiguration anlegen
 
 ```bash
-git clone <dieses-repo> prompt-library && cd prompt-library
+git clone <dieses-repo> promptory && cd promptory
 cp .env.privat.example .env.privat
 cp .env.arbeit.example .env.arbeit
 
@@ -111,15 +111,15 @@ womöglich inkonsistent. SQLite bringt dafür einen eigenen Befehl mit:
 
 ```bash
 #!/usr/bin/env bash
-# /usr/local/bin/prompt-library-backup
+# /usr/local/bin/promptory-backup
 set -euo pipefail
-ZIEL=/var/backups/prompt-library
+ZIEL=/var/backups/promptory
 STAMP=$(date +%F)
 mkdir -p "$ZIEL"
 
 for instanz in privat arbeit; do
   docker run --rm \
-    -v "prompt-library_${instanz}-data:/data:ro" \
+    -v "promptory_${instanz}-data:/data:ro" \
     -v "$ZIEL:/backup" \
     --entrypoint sh keinos/sqlite3 -c \
     "sqlite3 /data/prompts.db \".backup '/backup/${instanz}-${STAMP}.db'\""
@@ -130,7 +130,7 @@ find "$ZIEL" -name '*.db.gz' -mtime +30 -delete
 ```
 
 ```cron
-17 3 * * * /usr/local/bin/prompt-library-backup
+17 3 * * * /usr/local/bin/promptory-backup
 ```
 
 Der Volume-Name ist `<projektname>_<volume>`; `docker volume ls` zeigt ihn.
@@ -138,7 +138,7 @@ Prüfe eine Sicherung gelegentlich wirklich zurück — eine ungetestete Sicheru
 ist eine Vermutung:
 
 ```bash
-gunzip -c /var/backups/prompt-library/privat-2026-09-12.db.gz > /tmp/pruef.db
+gunzip -c /var/backups/promptory/privat-2026-09-12.db.gz > /tmp/pruef.db
 sqlite3 /tmp/pruef.db "PRAGMA integrity_check; SELECT COUNT(*) FROM prompts;"
 ```
 
@@ -165,7 +165,7 @@ privat und arbeit Client-ID und Rollen.
 
 | Feld | Wert |
 |------|------|
-| Name | `prompts-privat` |
+| Name | `promptory-privat` |
 | Authorization flow | dein üblicher expliziter Einwilligungsfluss |
 | Client type | **Confidential** |
 | Redirect URIs | `https://prompts.example.org/auth/callback` (exakt, ohne Schrägstrich am Ende) |
@@ -188,8 +188,8 @@ hinein, dessen Claim keine Rolle ergibt.
 
 | Feld | Wert |
 |------|------|
-| Name | `prompt-library-role-privat` |
-| Scope name | `prompt_library` |
+| Name | `promptory-role-privat` |
+| Scope name | `promptory` |
 | Expression | siehe unten |
 
 ```python
@@ -203,14 +203,14 @@ elif request.user.ak_groups.filter(name="prompts-privat-viewers").exists():
     role = "viewer"
 else:
     role = None          # kein Claim → kein Zugriff
-return {"prompt_library_role": role}
+return {"promptory_role": role}
 ```
 
 Das Mapping dem Provider unter *Scopes* zuweisen. Dann in der `.env`:
 
 ```
-OIDC_SCOPES=openid,profile,email,prompt_library
-OIDC_ROLE_CLAIM=prompt_library_role
+OIDC_SCOPES=openid,profile,email,promptory
+OIDC_ROLE_CLAIM=promptory_role
 OIDC_ROLE_MAP=
 ```
 

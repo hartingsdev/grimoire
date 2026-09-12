@@ -5,24 +5,22 @@ import (
 	"strings"
 )
 
-// RoleMapper bildet einen Claim aus dem IdP auf eine Rolle ab.
+// RoleMapper maps an IdP claim onto a role. The claim path may be nested, so
+// the app is not tied to one provider:
 //
-// Der Claim-Pfad darf verschachtelt sein, damit die App nicht an einen Provider
-// gebunden ist:
+//	groups                           Authentik, Authelia
+//	promptory_role                   custom claim, granted per application
+//	resource_access.promptory.roles  Keycloak
 //
-//	groups                          Authentik, Authelia
-//	prompt_library_role             eigener Claim, pro Anwendung vergeben
-//	resource_access.prompt-lib.roles Keycloak
-//
-// Ist Map leer, gilt der Claim-Wert unmittelbar als Rollenname. Liefert der
-// Claim mehrere Werte, gewinnt die höchste Rolle.
+// With an empty Map the claim value is taken as the role name directly. If the
+// claim carries several values, the highest role wins.
 type RoleMapper struct {
 	Path []string
 	Map  map[string]Role
 }
 
-// NewRoleMapper baut den Mapper aus OIDC_ROLE_CLAIM und OIDC_ROLE_MAP.
-// Die Map hat die Form "gruppe-a:admin,gruppe-b:editor".
+// NewRoleMapper builds the mapper from OIDC_ROLE_CLAIM and OIDC_ROLE_MAP,
+// the latter shaped like "group-a:admin,group-b:editor".
 func NewRoleMapper(claimPath, rawMap string) (*RoleMapper, error) {
 	path := strings.Split(strings.TrimSpace(claimPath), ".")
 	if len(path) == 0 || path[0] == "" {
@@ -55,8 +53,8 @@ func NewRoleMapper(claimPath, rawMap string) (*RoleMapper, error) {
 	return m, nil
 }
 
-// Resolve liest den Claim und liefert die höchste zutreffende Rolle.
-// Kein Treffer bedeutet RoleNone und damit kein Zugriff.
+// Resolve reads the claim and returns the highest matching role. No match
+// means RoleNone, which means no access.
 func (m *RoleMapper) Resolve(claims map[string]any) Role {
 	best := RoleNone
 	for _, value := range m.lookup(claims) {
@@ -73,7 +71,6 @@ func (m *RoleMapper) Resolve(claims map[string]any) Role {
 	return best
 }
 
-// lookup folgt dem Claim-Pfad und gibt alle gefundenen Werte als Strings zurück.
 func (m *RoleMapper) lookup(claims map[string]any) []string {
 	var current any = claims
 	for _, segment := range m.Path {

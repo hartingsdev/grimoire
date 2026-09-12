@@ -8,10 +8,9 @@ import (
 	"fmt"
 )
 
-// Die Zugriffs- und Refresh-Tokens des Providers liegen serverseitig in der
-// Session-Zeile, damit die App während einer laufenden Sitzung beim IdP
-// nachfragen kann, ob die Rolle noch stimmt. Verschlüsselt abgelegt, damit eine
-// kopierte SQLite-Datei nicht gleich gültige Tokens enthält.
+// Provider access and refresh tokens live server-side in the session row so
+// the app can re-check the role mid-session. Encrypted, so a copied SQLite
+// file does not hand over working tokens.
 func newAEAD(key []byte) (cipher.AEAD, error) {
 	if len(key) != 32 {
 		return nil, fmt.Errorf("DATA_ENCRYPTION_KEY muss 32 Byte lang sein, ist %d", len(key))
@@ -44,8 +43,8 @@ func (s *Store) open(ciphertext []byte) (string, error) {
 	}
 	plaintext, err := s.aead.Open(nil, ciphertext[:n], ciphertext[n:], nil)
 	if err != nil {
-		// Praktisch immer: DATA_ENCRYPTION_KEY wurde gewechselt. Die betroffene
-		// Session lässt sich dann nicht mehr revalidieren und wird verworfen.
+		// Almost always a rotated DATA_ENCRYPTION_KEY. The session can then no
+		// longer be revalidated and is discarded.
 		return "", fmt.Errorf("Wert nicht entschlüsselbar (DATA_ENCRYPTION_KEY gewechselt?): %w", err)
 	}
 	return string(plaintext), nil

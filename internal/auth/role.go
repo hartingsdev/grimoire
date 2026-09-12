@@ -1,12 +1,12 @@
-// Package auth enthält Rollen, Fähigkeiten, den OIDC-Ablauf und API-Keys.
-// Die Rechteableitung in capability.go ist die einzige Stelle im Projekt,
-// an der aus einer Identität Rechte werden.
+// Package auth holds roles, capabilities, the OIDC flow and API keys.
+// Capabilities() in capability.go is the only place where an identity turns
+// into permissions.
 package auth
 
 import "strings"
 
-// Role ist die Rolle eines Principals. Für Menschen kommt sie ausschließlich
-// aus dem IdP; in der Datenbank steht sie nur als ausdrücklich markierter Cache.
+// Role is a principal's role. For people it comes from the IdP only; the
+// database keeps it as an explicitly marked cache.
 type Role string
 
 const (
@@ -16,8 +16,7 @@ const (
 	RoleAdmin  Role = "admin"
 )
 
-// Rank ordnet die Rollen. Wird für MinRole und für "höchste gewinnt" beim
-// Claim-Mapping gebraucht.
+// Rank orders roles, for MinRole and for "highest wins" in claim mapping.
 func (r Role) Rank() int {
 	switch r {
 	case RoleViewer:
@@ -33,7 +32,6 @@ func (r Role) Rank() int {
 
 func (r Role) Valid() bool { return r.Rank() > 0 }
 
-// Label ist die Beschriftung in der Oberfläche.
 func (r Role) Label() string {
 	switch r {
 	case RoleViewer:
@@ -47,8 +45,6 @@ func (r Role) Label() string {
 	}
 }
 
-// ParseRole nimmt einen Rollennamen entgegen, wie er in der Datenbank oder in
-// einem Claim steht.
 func ParseRole(s string) Role {
 	switch Role(strings.ToLower(strings.TrimSpace(s))) {
 	case RoleViewer:
@@ -62,9 +58,8 @@ func ParseRole(s string) Role {
 	}
 }
 
-// MinRole liefert die schwächere von zwei Rollen. Damit wird die Rolle eines
-// API-Keys mit der aktuellen Rolle seines Besitzers verrechnet: ein Key kann
-// nie mehr dürfen als der Mensch, der ihn ausgestellt hat.
+// MinRole returns the weaker of two roles. Used to combine an API key's role
+// with its owner's current role: a key can never outrank the person who issued it.
 func MinRole(a, b Role) Role {
 	if a.Rank() <= b.Rank() {
 		return a

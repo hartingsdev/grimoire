@@ -2,7 +2,7 @@
 *.db
 *.db-shm
 *.db-wal
-/prompt-library
+/promptory
 # Echte Instanz-Konfigurationen enthalten Geheimnisse und bleiben außerhalb von
 # git. Versioniert sind nur die Vorlagen.
 /.env

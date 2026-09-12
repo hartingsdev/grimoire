@@ -10,30 +10,30 @@ import (
 	"strings"
 )
 
-// Aufbau eines API-Keys:
+// API key layout:
 //
 //	plk_privat_9f3k2md7qa4x_Sx7Qv3nR8tL0wB2yE5uH1jK4pD6gZ9aC3fM8sN0
 //	└┬┘ └──┬─┘ └─────┬────┘ └──────────────────┬──────────────────┘
-//	 │     │         │                         └ Geheimnis, nur als SHA-256 gespeichert
-//	 │     │         └ Key-ID: Klartext in der Datenbank, indiziert, in der UI sichtbar
-//	 │     └ Instanz aus APP_INSTANCE
-//	 └ fester, in Logs und Konfigdateien wiedererkennbarer Präfix
+//	 │     │         │                         └ secret, stored only as SHA-256
+//	 │     │         └ key id: plaintext in the database, indexed, shown in the UI
+//	 │     └ instance from APP_INSTANCE
+//	 └ fixed prefix, recognizable in logs and config files
 //
-// Die Zweiteilung in ID und Geheimnis erlaubt einen Index-Zugriff statt eines
-// Scans über alle Keys — und die ID darf man gefahrlos anzeigen und protokollieren.
+// Splitting id from secret buys an index lookup instead of a scan over every
+// key, and the id is safe to display and log.
 const (
 	keyPrefix     = "plk"
 	keyIDLength   = 12
 	keySecretSize = 32
 )
 
-// Alphabet ohne l, o, 0 und 1, damit vorgelesene oder abgetippte IDs eindeutig sind.
+// No l, o, 0 or 1, so ids stay unambiguous when read aloud or typed.
 const keyIDAlphabet = "abcdefghijkmnpqrstuvwxyz23456789"
 
 var ErrMalformedKey = errors.New("API-Key hat ein unbekanntes Format")
 
-// NewKey erzeugt einen Key für die angegebene Instanz. Der Klartext wird nur
-// einmal zurückgegeben und nirgends gespeichert.
+// NewKey mints a key for the given instance. The plaintext is returned once
+// and stored nowhere.
 func NewKey(instance string) (plaintext, id string, hash []byte, err error) {
 	idBytes := make([]byte, keyIDLength)
 	if _, err = rand.Read(idBytes); err != nil {
@@ -55,12 +55,10 @@ func NewKey(instance string) (plaintext, id string, hash []byte, err error) {
 	return plaintext, id, HashSecret(secret), nil
 }
 
-// ParseKey zerlegt einen vorgelegten Key und prüft dabei Präfix und Instanz.
-// Ein Key der falschen Instanz wird hier abgewiesen, bevor die Datenbank
-// überhaupt angefasst wird.
+// ParseKey splits a presented key and checks prefix and instance. A key from
+// another instance is rejected here, before any database access.
 func ParseKey(instance, raw string) (id, secret string, err error) {
-	// SplitN mit 4, nicht Split: das base64url-kodierte Geheimnis darf selbst
-	// Unterstriche enthalten und muss ungeteilt bleiben.
+	// SplitN, not Split: the base64url secret may itself contain underscores.
 	parts := strings.SplitN(strings.TrimSpace(raw), "_", 4)
 	if len(parts) != 4 {
 		return "", "", ErrMalformedKey
@@ -74,23 +72,20 @@ func ParseKey(instance, raw string) (id, secret string, err error) {
 	return parts[2], parts[3], nil
 }
 
-// HashSecret hasht den geheimen Teil eines Keys.
+// HashSecret hashes the secret half of a key.
 //
-// Bewusst SHA-256 und nicht bcrypt/argon2: langsame Hashes existieren, um
-// schwache, von Menschen gewählte Passwörter gegen Brute Force zu schützen.
-// Ein Geheimnis mit 32 Byte Entropie ist nicht ratbar — ein langsamer Hash
-// würde nur jeden einzelnen API-Request verteuern.
+// SHA-256 rather than bcrypt/argon2 on purpose: slow hashes exist to protect
+// weak, human-chosen passwords from brute force. A 32-byte random secret is
+// not guessable, so a slow hash would only tax every API request.
 func HashSecret(secret string) []byte {
 	sum := sha256.Sum256([]byte(secret))
 	return sum[:]
 }
 
-// SecretMatches vergleicht in konstanter Zeit.
 func SecretMatches(secret string, stored []byte) bool {
 	return subtle.ConstantTimeCompare(HashSecret(secret), stored) == 1
 }
 
-// MaskKeyID kürzt eine Key-ID für Log-Ausgaben.
 func MaskKeyID(id string) string {
 	if len(id) <= 4 {
 		return id

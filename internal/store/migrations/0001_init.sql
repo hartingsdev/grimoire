@@ -1,12 +1,11 @@
--- Grundschema. users.id ist ein interner Surrogatschlüssel: alle Fremdschlüssel
--- zeigen darauf, damit beim Löschen eines Nutzers die sub geleert werden kann,
--- ohne Historie oder Fremdschlüssel zu zerstören (Grabstein-Zeile).
+-- users.id is an internal surrogate key that every foreign key points at, so
+-- deleting a user can clear the sub without tearing up history (tombstone row).
 CREATE TABLE users (
     id             TEXT PRIMARY KEY,
-    sub            TEXT UNIQUE,               -- NULL nach Löschung
+    sub            TEXT UNIQUE,               -- NULL once deleted
     email          TEXT,
     display_name   TEXT,
-    cached_role    TEXT NOT NULL DEFAULT '',  -- Cache aus dem IdP, NICHT autoritativ
+    cached_role    TEXT NOT NULL DEFAULT '',  -- cache from the IdP, NOT authoritative
     cached_role_at INTEGER NOT NULL DEFAULT 0,
     created_at     INTEGER NOT NULL,
     last_login_at  INTEGER NOT NULL DEFAULT 0,
@@ -40,7 +39,7 @@ CREATE TABLE prompt_tags (
 );
 CREATE INDEX prompt_tags_tag ON prompt_tags(tag_id);
 
--- Append-only: jede Fassung vor einer Änderung wird hier abgelegt.
+-- Append-only: every state a prompt passed through.
 CREATE TABLE prompt_revisions (
     id         INTEGER PRIMARY KEY,
     prompt_id  TEXT NOT NULL REFERENCES prompts(id) ON DELETE CASCADE,
@@ -56,11 +55,11 @@ CREATE TABLE prompt_revisions (
 );
 
 CREATE TABLE api_keys (
-    id             TEXT PRIMARY KEY,          -- öffentliche Key-ID, steht im Klartext im Key
-    key_hash       BLOB NOT NULL,             -- SHA-256 des Geheimnisses
+    id             TEXT PRIMARY KEY,          -- public key id, plaintext inside the key
+    key_hash       BLOB NOT NULL,             -- SHA-256 of the secret
     name           TEXT NOT NULL,
     role           TEXT NOT NULL CHECK (role IN ('viewer','editor')),
-    owner_id       TEXT REFERENCES users(id), -- NULL vorgesehen für spätere Service-Keys
+    owner_id       TEXT REFERENCES users(id), -- NULL reserved for future service keys
     created_at     INTEGER NOT NULL,
     expires_at     INTEGER NOT NULL,
     last_used_at   INTEGER NOT NULL DEFAULT 0,
@@ -70,7 +69,7 @@ CREATE TABLE api_keys (
 CREATE INDEX api_keys_owner ON api_keys(owner_id);
 
 CREATE TABLE sessions (
-    id               TEXT PRIMARY KEY,        -- 32 Byte Zufall, opak
+    id               TEXT PRIMARY KEY,        -- 32 random bytes, opaque
     user_id          TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
     role             TEXT NOT NULL,
     csrf_token       TEXT NOT NULL,
@@ -78,7 +77,7 @@ CREATE TABLE sessions (
     expires_at       INTEGER NOT NULL,
     last_seen_at     INTEGER NOT NULL,
     revalidate_after INTEGER NOT NULL,
-    access_token_enc BLOB,                    -- AES-GCM, Schlüssel aus DATA_ENCRYPTION_KEY
+    access_token_enc BLOB,                    -- AES-GCM, key from DATA_ENCRYPTION_KEY
     refresh_token_enc BLOB,
     token_expiry     INTEGER NOT NULL DEFAULT 0
 );
@@ -107,8 +106,8 @@ CREATE TABLE audit_log (
 );
 CREATE INDEX audit_log_at ON audit_log(at DESC);
 
--- Denormalisierte Suchquelle. Die Trigger halten den FTS5-Index synchron,
--- damit kein Codepfad ihn vergessen kann.
+-- Denormalized search source. The triggers keep the FTS5 index in step, so no
+-- code path can forget it.
 CREATE TABLE prompt_search (
     prompt_id TEXT PRIMARY KEY REFERENCES prompts(id) ON DELETE CASCADE,
     title     TEXT NOT NULL,

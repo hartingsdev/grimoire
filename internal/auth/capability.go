@@ -1,7 +1,5 @@
 package auth
 
-// Capability ist ein einzelnes Recht. Routen deklarieren, welche sie brauchen;
-// Principals bekommen sie über Capabilities() zugeteilt.
 type Capability string
 
 const (
@@ -13,14 +11,12 @@ const (
 	CapAuditRead    Capability = "audit:read"
 )
 
-// ManagementCapabilities sind die Rechte, die ein API-Key niemals erhalten darf.
-// routes_test.go prüft gegen genau diese Liste, dass keine Route sie an einen
-// Key ausgibt.
+// ManagementCapabilities must never be granted to an API key. routes_test.go
+// checks every route against exactly this list.
 var ManagementCapabilities = []Capability{
 	CapKeysManage, CapAdminRead, CapAdminUsers, CapAuditRead,
 }
 
-// Kind unterscheidet, wie sich ein Principal ausgewiesen hat.
 type Kind string
 
 const (
@@ -41,14 +37,13 @@ func (c CapSet) Has(cap Capability) bool {
 	return ok
 }
 
-// Capabilities leitet aus einem Principal seine Rechte ab. Das ist die einzige
-// Stelle, an der das passiert — für Browser-Sessions wie für API-Keys.
+// Capabilities derives permissions from a principal — the only place this
+// happens, for browser sessions and API keys alike.
 //
-// Die Prüfung auf KindSession im Admin-Zweig ist die vollständige Umsetzung von
-// "API-Keys können keine Keys verwalten": ein Key bekommt die Verwaltungsrechte
-// selbst dann nicht, wenn jemand ihm von Hand role='admin' in die Datenbank
-// schreibt. Die Startprüfung in httpapi und routes_test.go sorgen nur dafür,
-// dass niemand später an dieser Funktion vorbei routet.
+// The KindSession check is the whole of "API keys cannot manage keys": a key
+// is denied management rights even if someone hand-writes role='admin' into
+// its database row. The startup check and routes_test.go only make sure
+// nothing later routes around this function.
 func Capabilities(p Principal) CapSet {
 	caps := CapSet{}
 	switch p.Role {
@@ -57,8 +52,8 @@ func Capabilities(p Principal) CapSet {
 	case RoleEditor:
 		caps.add(CapPromptsRead, CapPromptsWrite)
 		if p.Kind == KindSession {
-			// Bearbeiter verwalten ihre eigenen Keys; die Einschränkung auf die
-			// eigenen liegt in den Abfragen, nicht in der Fähigkeit.
+			// Editors manage their own keys; the "own" part lives in the
+			// queries, not in the capability.
 			caps.add(CapKeysManage)
 		}
 	case RoleAdmin:

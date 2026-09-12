@@ -1,33 +1,32 @@
-# Überlagerung für traefik: keine veröffentlichten Ports mehr, stattdessen
-# Labels und das externe traefik-Netz.
+# traefik overlay: no published ports, labels and the external network instead.
 #
 #   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d
 #
-# Voraussetzung: ein Netz namens "traefik", an dem auch traefik hängt, und ein
-# Zertifikats-Resolver namens "le" (Name ggf. anpassen).
+# Expects a network named "traefik" that traefik is attached to, and a
+# certificate resolver named "le" (rename to match your setup).
 
 services:
-  prompts-privat:
+  promptory-privat:
     ports: !reset []
     networks: [traefik]
     labels:
       traefik.enable: "true"
       traefik.docker.network: traefik
-      traefik.http.routers.prompts-privat.rule: "Host(`prompts.example.org`)"
-      traefik.http.routers.prompts-privat.entrypoints: websecure
-      traefik.http.routers.prompts-privat.tls.certresolver: le
-      traefik.http.services.prompts-privat.loadbalancer.server.port: "8080"
+      traefik.http.routers.promptory-privat.rule: "Host(`prompts.example.org`)"
+      traefik.http.routers.promptory-privat.entrypoints: websecure
+      traefik.http.routers.promptory-privat.tls.certresolver: le
+      traefik.http.services.promptory-privat.loadbalancer.server.port: "8080"
 
-  prompts-arbeit:
+  promptory-arbeit:
     ports: !reset []
     networks: [traefik]
     labels:
       traefik.enable: "true"
       traefik.docker.network: traefik
-      traefik.http.routers.prompts-arbeit.rule: "Host(`prompts-arbeit.example.org`)"
-      traefik.http.routers.prompts-arbeit.entrypoints: websecure
-      traefik.http.routers.prompts-arbeit.tls.certresolver: le
-      traefik.http.services.prompts-arbeit.loadbalancer.server.port: "8080"
+      traefik.http.routers.promptory-arbeit.rule: "Host(`prompts-arbeit.example.org`)"
+      traefik.http.routers.promptory-arbeit.entrypoints: websecure
+      traefik.http.routers.promptory-arbeit.tls.certresolver: le
+      traefik.http.services.promptory-arbeit.loadbalancer.server.port: "8080"
 
 networks:
   traefik:

@@ -11,7 +11,7 @@ if ! curl -sf http://localhost:8090/default/.well-known/openid-configuration >/d
   exit 1
 fi
 
-export APP_TITLE="Prompt-Bibliothek (Entwicklung)"
+export APP_TITLE="Promptory (dev)"
 export APP_INSTANCE=privat
 export BASE_URL=http://localhost:8080
 export LISTEN_ADDR=:8080
@@ -22,7 +22,7 @@ export COOKIE_SECURE=false       # lokal ohne TLS
 export DATA_ENCRYPTION_KEY="$(printf 'entwicklungsschluessel-32-byte!!' | base64)"
 
 export OIDC_ISSUER=http://localhost:8090/default
-export OIDC_CLIENT_ID=prompt-library
+export OIDC_CLIENT_ID=promptory
 export OIDC_CLIENT_SECRET=geheim
 export OIDC_REDIRECT_URI=http://localhost:8080/auth/callback
 export OIDC_SCOPES=openid,profile,email
