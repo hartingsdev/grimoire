@@ -1,7 +1,7 @@
 # Build stage. It runs on the BUILD platform and cross-compiles for the TARGET
 # platform — pure Go with CGO_ENABLED=0 makes that free, so a multi-arch build
 # needs no QEMU emulation.
-FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-bookworm AS build
 WORKDIR /src
 
 # Dependencies before the source, so a code change does not invalidate the
