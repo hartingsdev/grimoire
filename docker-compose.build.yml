@@ -1,0 +1,20 @@
+# Overlay for building from source instead of pulling the published image.
+#
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
+#
+# Both services share one image name so the context is built once.
+
+services:
+  grimoire-personal:
+    image: grimoire:local
+    build:
+      context: .
+      args:
+        VERSION: local
+
+  grimoire-work:
+    image: grimoire:local
+    build:
+      context: .
+      args:
+        VERSION: local

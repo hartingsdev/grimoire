@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/hartingsdev/grimoire/internal/auth"
+	"github.com/hartingsdev/grimoire/internal/buildinfo"
 	"github.com/hartingsdev/grimoire/internal/config"
 	"github.com/hartingsdev/grimoire/internal/httpapi"
 	"github.com/hartingsdev/grimoire/internal/store"
@@ -26,8 +27,13 @@ import (
 func main() {
 	healthcheck := flag.Bool("healthcheck", false,
 		"probe the running server and exit 0 or 1 (for Docker HEALTHCHECK)")
+	showVersion := flag.Bool("version", false, "print the version and exit")
 	flag.Parse()
 
+	if *showVersion {
+		fmt.Println("grimoire", buildinfo.String())
+		return
+	}
 	if *healthcheck {
 		os.Exit(runHealthcheck())
 	}
@@ -44,6 +50,7 @@ func run() error {
 	}
 	log := newLogger(cfg.LogLevel)
 	log.Info("instance starting",
+		"version", buildinfo.Version, "commit", buildinfo.Commit,
 		"instance", cfg.AppInstance, "title", cfg.AppTitle,
 		"addr", cfg.ListenAddr, "database", cfg.DBPath)
 

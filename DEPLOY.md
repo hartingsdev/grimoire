@@ -18,6 +18,7 @@ how to test both locally first.
 
 ```bash
 git clone https://github.com/hartingsdev/grimoire && cd grimoire
+cp .env.example          .env            # which image version to run
 cp .env.personal.example .env.personal
 cp .env.work.example     .env.work
 
@@ -29,9 +30,24 @@ openssl rand -base64 32   # → DATA_ENCRYPTION_KEY in .env.work
 Then set in both files: `BASE_URL`, `OIDC_ISSUER`, `OIDC_CLIENT_ID`,
 `OIDC_CLIENT_SECRET`, `OIDC_REDIRECT_URI`, `TRUSTED_PROXY_CIDRS`.
 
-> The real `.env.personal` and `.env.work` are in `.gitignore`; only the
-> templates are versioned. Checking the repo out on the server keeps the secrets
-> there and nowhere else.
+There are two kinds of `.env` here, and mixing them up is the easiest mistake to
+make:
+
+| File | Read by | Contains |
+|------|---------|----------|
+| `.env` | Compose itself | `GRIMOIRE_TAG` — which image version to run |
+| `.env.personal`, `.env.work` | the containers | that instance's configuration |
+
+> The real `.env*` files are in `.gitignore`; only the templates are versioned.
+> Checking the repo out on the server keeps the secrets there and nowhere else.
+
+Pin an exact version rather than leaving `latest`, so an update is something you
+decide rather than something the next `pull` does to you:
+
+```
+# .env
+GRIMOIRE_TAG=v1.0.0
+```
 
 Two values you **cannot change afterwards without consequences**:
 
@@ -41,10 +57,14 @@ Two values you **cannot change afterwards without consequences**:
 
 ### 1.3 Starting
 
+The image is pulled from `ghcr.io/hartingsdev/grimoire`, built for amd64 and
+arm64 — nothing is compiled on the server.
+
 With Caddy or nginx on the host — the app then listens on localhost only:
 
 ```bash
-docker compose up -d --build
+docker compose pull
+docker compose up -d
 docker compose ps
 curl -s localhost:8081/healthz && curl -s localhost:8082/healthz
 ```
@@ -54,7 +74,15 @@ With traefik on the same Docker network:
 ```bash
 # Adjust the two Host() rules and the certresolver name in
 # docker-compose.traefik.yml, then:
-docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d --build
+docker compose -f docker-compose.yml -f docker-compose.traefik.yml pull
+docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d
+```
+
+To build from source instead — for a change you have not released yet, or on an
+architecture the published image does not cover:
+
+```bash
+docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 ```
 
 `/readyz` returns `200` only once the identity provider has been reached. That
@@ -142,13 +170,38 @@ sqlite3 /tmp/check.db "PRAGMA integrity_check; SELECT COUNT(*) FROM prompts;"
 
 ### 1.6 Updating
 
+Change the pinned version and pull:
+
 ```bash
-git pull
-docker compose up -d --build
+sed -i 's/^GRIMOIRE_TAG=.*/GRIMOIRE_TAG=v1.1.0/' .env
+docker compose pull
+docker compose up -d
+docker compose logs --tail=20 | grep 'instance starting'   # confirms the version
 ```
 
-Migrations run at startup. Take a backup before an update that touches the
-schema.
+Migrations run at startup. Take a backup first when the release notes mention a
+schema change.
+
+Rolling back is the same move with the previous tag — but only as long as no
+migration ran in between. Migrations move forward only; there is no downgrade
+path. That is the reason for the backup.
+
+### 1.7 Cutting a release
+
+Releases are made from GitHub, not from a laptop: **Actions → Release → Run
+workflow**, then choose `patch`, `minor` or `major` (or type an exact version).
+The workflow runs the tests, creates the tag, builds the image for both
+architectures, pushes it to `ghcr.io` and writes the release notes.
+
+Pushing a tag by hand does the same thing, for when you are already in a
+terminal:
+
+```bash
+git tag -a v1.1.0 -m "Release v1.1.0" && git push origin v1.1.0
+```
+
+Each release publishes four tags: the exact version (`1.1.0`), the minor line
+(`1.1`), the major line (`1`) and `latest`. On a server, pin the exact version.
 
 ---
 
@@ -354,12 +407,13 @@ correct.
 **Server**
 
 - [ ] Docker and Compose present
-- [ ] Repo checked out, `.env.personal` and `.env.work` created from the templates
+- [ ] Repo checked out, `.env`, `.env.personal` and `.env.work` created from the templates
+- [ ] `GRIMOIRE_TAG` pinned to an exact version rather than `latest`
 - [ ] One `DATA_ENCRYPTION_KEY` generated per instance
 - [ ] `TRUSTED_PROXY_CIDRS` matches the proxy
 - [ ] Two DNS names point at the server
 - [ ] Reverse proxy with TLS and `X-Forwarded-Proto`
-- [ ] `docker compose up -d --build`, `/readyz` returns `200`
+- [ ] `docker compose pull && docker compose up -d`, `/readyz` returns `200`
 - [ ] Backup script installed and **restored once** as a check
 - [ ] Monitoring on `/readyz`
 

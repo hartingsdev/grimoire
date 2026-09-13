@@ -1,0 +1,20 @@
+version: 2
+updates:
+  # Go modules. The OIDC and JOSE libraries are the security-relevant ones here,
+  # so these updates are worth seeing promptly.
+  - package-ecosystem: gomod
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+
+  # Workflow actions. Without this they silently rot on old major versions.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly
+
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: monthly

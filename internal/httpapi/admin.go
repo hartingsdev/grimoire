@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/hartingsdev/grimoire/internal/auth"
+	"github.com/hartingsdev/grimoire/internal/buildinfo"
 	"github.com/hartingsdev/grimoire/internal/config"
 	"github.com/hartingsdev/grimoire/internal/store"
 )
@@ -29,6 +30,7 @@ func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
 		"roleLabel":    p.Role.Label(),
 		"capabilities": caps,
 		"instance": map[string]any{
+			"version":            buildinfo.Version,
 			"title":              s.cfg.AppTitle,
 			"name":               s.cfg.AppInstance,
 			"privatePrompts":     s.cfg.PrivatePrompts,

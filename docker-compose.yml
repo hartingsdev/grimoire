@@ -1,14 +1,25 @@
 # One service per instance, same image, separate configuration and data.
 #
+# The image comes from the registry — building on the server is not needed.
+# Pin a version in ./.env:
+#
+#   GRIMOIRE_TAG=v1.0.0
+#
+# Note the two different kinds of .env here: ./.env is read by Compose itself
+# for the substitution below, while .env.personal and .env.work are handed to
+# the containers as their environment.
+#
 # Ports are bound to 127.0.0.1 on purpose: TLS and public reachability are the
 # reverse proxy's job (Caddy or nginx on the host). For traefik, add the
 # overlay:
 #   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d
+#
+# To build from source instead of pulling:
+#   docker compose -f docker-compose.yml -f docker-compose.build.yml up -d --build
 
 services:
   grimoire-personal:
-    build: .
-    image: grimoire:latest
+    image: ghcr.io/hartingsdev/grimoire:${GRIMOIRE_TAG:-latest}
     container_name: grimoire-personal
     restart: unless-stopped
     env_file: .env.personal
@@ -18,8 +29,7 @@ services:
       - "127.0.0.1:8081:8080"
 
   grimoire-work:
-    build: .
-    image: grimoire:latest
+    image: ghcr.io/hartingsdev/grimoire:${GRIMOIRE_TAG:-latest}
     container_name: grimoire-work
     restart: unless-stopped
     env_file: .env.work

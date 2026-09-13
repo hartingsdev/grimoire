@@ -1,0 +1,184 @@
+name: Release
+
+# Two triggers, one workflow, on purpose:
+#
+#   * "Run workflow" in the Actions tab computes the next version, creates the
+#     tag and releases it. This is the normal path.
+#   * Pushing a v1.2.3 tag by hand releases that tag.
+#
+# They live together because a tag pushed with GITHUB_TOKEN does not start
+# another workflow run (GitHub's loop protection). Splitting this into a
+# "create tag" workflow and a "on tag" workflow would therefore need a personal
+# access token — a long-lived credential this project does not otherwise need.
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump:
+        description: Which part of the version to increase
+        type: choice
+        options: [patch, minor, major]
+        default: patch
+      version:
+        description: Explicit version without the leading v (e.g. 1.4.0). Overrides the choice above.
+        type: string
+        required: false
+  push:
+    tags: ['v[0-9]+.[0-9]+.[0-9]+']
+
+permissions:
+  contents: write   # create tags and releases
+  packages: write   # push to ghcr.io
+
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    name: Format, vet, test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: gofmt
+        run: |
+          unformatted=$(gofmt -l ./cmd ./internal ./web)
+          if [ -n "$unformatted" ]; then
+            echo "These files are not gofmt'd:"; echo "$unformatted"; exit 1
+          fi
+      - run: go vet ./...
+      - run: go test -race ./...
+
+  version:
+    name: Determine version
+    runs-on: ubuntu-latest
+    needs: check
+    outputs:
+      version: ${{ steps.compute.outputs.version }}
+      major: ${{ steps.compute.outputs.major }}
+      minor: ${{ steps.compute.outputs.minor }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # tags are needed to find the previous version
+
+      - name: Compute
+        id: compute
+        env:
+          EVENT: ${{ github.event_name }}
+          EXPLICIT: ${{ inputs.version }}
+          BUMP: ${{ inputs.bump }}
+        run: |
+          set -euo pipefail
+          if [ -n "${EXPLICIT:-}" ]; then
+            v="${EXPLICIT#v}"
+          elif [ "$EVENT" = "push" ]; then
+            v="${GITHUB_REF_NAME#v}"
+          else
+            latest=$(git tag -l 'v[0-9]*.[0-9]*.[0-9]*' --sort=-v:refname | head -1)
+            latest="${latest:-v0.0.0}"
+            IFS=. read -r major minor patch <<<"${latest#v}"
+            case "${BUMP:-patch}" in
+              major) major=$((major + 1)); minor=0; patch=0 ;;
+              minor) minor=$((minor + 1)); patch=0 ;;
+              *)     patch=$((patch + 1)) ;;
+            esac
+            v="$major.$minor.$patch"
+            echo "Previous release: $latest"
+          fi
+
+          if ! [[ "$v" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "::error::'$v' is not a MAJOR.MINOR.PATCH version"; exit 1
+          fi
+          if [ "$EVENT" != "push" ] && git rev-parse -q --verify "refs/tags/v$v" >/dev/null; then
+            echo "::error::v$v already exists"; exit 1
+          fi
+
+          IFS=. read -r major minor _ <<<"$v"
+          {
+            echo "version=$v"
+            echo "major=$major"
+            echo "minor=$major.$minor"
+          } >> "$GITHUB_OUTPUT"
+          echo "Releasing v$v"
+
+      - name: Create tag
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          set -euo pipefail
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git tag -a "v${{ steps.compute.outputs.version }}" \
+                  -m "Release v${{ steps.compute.outputs.version }}"
+          git push origin "v${{ steps.compute.outputs.version }}"
+
+  publish:
+    name: Build and publish
+    runs-on: ubuntu-latest
+    needs: version
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build timestamp
+        id: meta
+        run: echo "date=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
+      - uses: docker/setup-buildx-action@v3
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # No QEMU: the build stage runs natively and cross-compiles, and the
+      # runtime stage only copies files, so nothing foreign is ever executed.
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm64
+          push: true
+          provenance: mode=max
+          sbom: true
+          build-args: |
+            VERSION=${{ needs.version.outputs.version }}
+            COMMIT=${{ github.sha }}
+            BUILD_DATE=${{ steps.meta.outputs.date }}
+          tags: |
+            ghcr.io/${{ github.repository }}:${{ needs.version.outputs.version }}
+            ghcr.io/${{ github.repository }}:${{ needs.version.outputs.minor }}
+            ghcr.io/${{ github.repository }}:${{ needs.version.outputs.major }}
+            ghcr.io/${{ github.repository }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Create the GitHub release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          V: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          notes=$(mktemp)
+          cat > "$notes" <<NOTES
+          ## Container image
+
+          \`\`\`
+          ghcr.io/${{ github.repository }}:$V
+          \`\`\`
+
+          Also tagged \`${{ needs.version.outputs.minor }}\`, \`${{ needs.version.outputs.major }}\` and \`latest\`.
+          Built for linux/amd64 and linux/arm64.
+
+          To update an existing deployment, set \`GRIMOIRE_TAG=$V\` in \`.env\`
+          and run \`docker compose pull && docker compose up -d\`.
+          Database migrations run at startup; take a backup first if the release
+          notes below mention a schema change.
+
+          ---
+          NOTES
+          gh release create "v$V" --title "v$V" --notes-file "$notes" --generate-notes

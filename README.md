@@ -1,5 +1,8 @@
 # Grimoire
 
+[![CI](https://github.com/hartingsdev/grimoire/actions/workflows/ci.yml/badge.svg)](https://github.com/hartingsdev/grimoire/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/hartingsdev/grimoire?sort=semver)](https://github.com/hartingsdev/grimoire/releases)
+
 A self-hosted prompt library with OIDC sign-in, role-based permissions and a
 REST API for scripts. One Go binary, one SQLite file, one container — runs
 anywhere Docker does, tied to no cloud provider.
@@ -110,7 +113,16 @@ go test ./...
 ```
 
 For production, follow [DEPLOY.md](DEPLOY.md): copy the `.env` templates, point
-a reverse proxy at it, and `docker compose up -d --build`.
+a reverse proxy at it, and pull the published image:
+
+```bash
+ghcr.io/hartingsdev/grimoire:latest      # linux/amd64, linux/arm64
+```
+
+Releases are cut from the Actions tab (**Release → Run workflow**, choose patch,
+minor or major) or by pushing a `v1.2.3` tag. Each one runs the tests, builds
+both architectures, publishes to the registry and writes the release notes. On a
+server, pin the exact version in `.env` rather than tracking `latest`.
 
 ## Using it from a script
 
