@@ -2,17 +2,28 @@ version: 2
 updates:
   # Go modules. The OIDC and JOSE libraries are the security-relevant ones here,
   # so these updates are worth seeing promptly.
+  #
+  # Minor and patch updates arrive as one grouped pull request; major ones stay
+  # separate, because those are the ones that deserve reading.
   - package-ecosystem: gomod
     directory: /
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    groups:
+      go-minor-patch:
+        update-types: [minor, patch]
 
   # Workflow actions. Without this they silently rot on old major versions.
+  # Grouped into a single pull request: ungrouped, a first run opens one per
+  # action, which is a lot of noise for a handful of version bumps.
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: monthly
+    groups:
+      actions:
+        patterns: ["*"]
 
   - package-ecosystem: docker
     directory: /
