@@ -50,7 +50,7 @@ jobs:
 
       # Built but not pushed: this only has to prove the Dockerfile still works.
       # One architecture is enough for that; the release builds both.
-      - uses: docker/build-push-action@v6
+      - uses: docker/build-push-action@v7
         with:
           context: .
           platforms: linux/amd64
