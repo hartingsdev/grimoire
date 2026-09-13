@@ -1,10 +1,10 @@
 module github.com/hartingsdev/grimoire
 
-go 1.25.0
+go 1.27
 
 require (
-	github.com/coreos/go-oidc/v3 v3.16.0
-	golang.org/x/oauth2 v0.32.0
+	github.com/coreos/go-oidc/v3 v3.21.0
+	golang.org/x/oauth2 v0.37.0
 	modernc.org/sqlite v1.58.0
 )
 

@@ -218,6 +218,14 @@ web/                the UI, embedded into the binary via go:embed
 `STATIC_DIR=./web` serves the UI from disk instead, so HTML, CSS and JS can be
 edited without recompiling. `scripts/dev.sh` sets it for you.
 
+## License
+
+Apache License 2.0 — see [LICENSE](LICENSE). Copyright 2026 Grimoire
+contributors.
+
+Apache rather than MIT for the explicit patent grant: MIT is silent on patents,
+which is a small but real ambiguity once other people contribute code.
+
 ## Status
 
 Working and tested end to end: OIDC sign-in with all three roles, the API with

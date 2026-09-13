@@ -1,7 +1,7 @@
 # Build stage. It runs on the BUILD platform and cross-compiles for the TARGET
 # platform — pure Go with CGO_ENABLED=0 makes that free, so a multi-arch build
 # needs no QEMU emulation.
-FROM --platform=$BUILDPLATFORM golang:1.25-bookworm AS build
+FROM --platform=$BUILDPLATFORM golang:1.27-bookworm AS build
 WORKDIR /src
 
 # Dependencies before the source, so a code change does not invalidate the
@@ -42,6 +42,7 @@ ARG BUILD_DATE=
 LABEL org.opencontainers.image.title="Grimoire" \
       org.opencontainers.image.description="Self-hosted prompt library with OIDC sign-in and a REST API" \
       org.opencontainers.image.source="https://github.com/hartingsdev/grimoire" \
+      org.opencontainers.image.licenses="Apache-2.0" \
       org.opencontainers.image.version="${VERSION}" \
       org.opencontainers.image.revision="${COMMIT}" \
       org.opencontainers.image.created="${BUILD_DATE}"
